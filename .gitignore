@@ -1,0 +1,7 @@
+configs/**
+*.yaml
+db/**
+__debug_bin
+images/**
+!images/.gitkeep
+!images/sample.jpg
