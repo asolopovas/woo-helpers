@@ -1,6 +1,7 @@
 package wooh
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -49,7 +50,6 @@ type productCache struct {
 	mu         sync.Mutex               // to guard concurrent access (if needed)
 }
 
-// fetchFromCache loads products from cacheFile if still valid.
 func (pc *productCache) fetchFromCache(cacheFile string, maxAge time.Duration) ([]map[string]interface{}, error) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
@@ -73,8 +73,6 @@ func (pc *productCache) fetchFromCache(cacheFile string, maxAge time.Duration) (
 	// Cache is stale
 	return nil, nil
 }
-
-// saveToCache writes products to cacheFile with the current timestamp.
 func (pc *productCache) saveToCache(cacheFile string, products []map[string]interface{}) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
@@ -290,12 +288,6 @@ func cleanHTMLToMarkdown(html string) (string, error) {
 
 	return markdown, nil
 }
-func getProductsEndpoint(conf *Config) string {
-	return fmt.Sprintf(
-		"https://%s/wp-json/wc/v3/products?consumer_key=%s&consumer_secret=%s",
-		conf.Site, conf.WooConsumerKey, conf.WooConsumerSecret,
-	)
-}
 func readConfig(configPath string) (*Config, error) {
 	configFile, err := os.ReadFile(configPath)
 	if err != nil {
@@ -331,7 +323,10 @@ func UpdateSEO(conf *Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch products: %w", err)
 	}
-	// reader := bufio.NewReader(os.Stdin) // For user input
+    // print products length
+    fmt.Printf("Products To Be Processed: %d\n", len(products))
+
+	reader := bufio.NewReader(os.Stdin) // For user input
 
 	for _, product := range products {
 		productID := product["id"]
@@ -377,20 +372,20 @@ func UpdateSEO(conf *Config) error {
 		fmt.Println("Meta Title: " + metaTitle)
 		fmt.Println("Meta Description: " + metaDescription)
 
-		// for {
-		// 	fmt.Println("Do you approve these values? (y/n): ")
-		// 	input, _ := reader.ReadString('\n')
-		// 	input = strings.TrimSpace(input)
+		for {
+			fmt.Println("Do you approve these values? (y/n): ")
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
 
-		// 	if input == "y" {
-		// 		break
-		// 	} else if input == "n" {
-		// 		fmt.Println("Skipping this product...")
-		// 		continue
-		// 	} else {
-		// 		fmt.Println("Invalid input. Please enter 'y' for yes or 'n' for no.")
-		// 	}
-		// }
+			if input == "y" {
+				break
+			} else if input == "n" {
+				fmt.Println("Skipping this product...")
+				continue
+			} else {
+				fmt.Println("Invalid input. Please enter 'y' for yes or 'n' for no.")
+			}
+		}
 
 		// Update the product's Yoast SEO fields
 		updatePayload := map[string]interface{}{
@@ -430,8 +425,7 @@ func UpdateSEO(conf *Config) error {
 	}
 
 	return nil
-}
-func UploadImageToWordPress(conf *Config, imageDirPath string) error {
+}func UploadImageToWordPress(conf *Config, imageDirPath string) error {
 	client := resty.New()
 
 	files, err := os.ReadDir(imageDirPath)
