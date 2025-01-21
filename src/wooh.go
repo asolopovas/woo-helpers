@@ -27,9 +27,16 @@ type Config struct {
 	WooConsumerSecret string      `yaml:"consumer_secret"`
 	ProductMeta       ProductMeta `yaml:"product_meta"`
 }
-
 type Category struct {
 	ID string `yaml:"id"`
+}
+type ProductMeta struct {
+	Name             *string
+	Type             string        `yaml:"type"`
+	RegularPrice     string        `yaml:"regular_price"`
+	Description      string        `yaml:"description"`
+	ShortDescription string        `yaml:"short_description"`
+	Categories       []interface{} `yaml:"categories"`
 }
 
 func GetConfig(configPath string) (*Config, error) {
@@ -59,76 +66,6 @@ func GetConfig(configPath string) (*Config, error) {
 
 	return readConfig(configPath)
 }
-
-type ProductMeta struct {
-	Name             *string
-	Type             string        `yaml:"type"`
-	RegularPrice     string        `yaml:"regular_price"`
-	Description      string        `yaml:"description"`
-	ShortDescription string        `yaml:"short_description"`
-	Categories       []interface{} `yaml:"categories"`
-}
-
-func cleanHTMLToMarkdown(html string) (string, error) {
-	// Convert HTML to Markdown
-	markdown, err := htmltomarkdown.ConvertString(html)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Replace #### with ## for better readability
-	markdown = strings.ReplaceAll(markdown, "####", "##")
-
-	// Remove all images in the form ![](url)
-	// Regex pattern to match images in Markdown
-	imageRegex := regexp.MustCompile(`!\[.*?\]\(.*?\)`)
-	markdown = imageRegex.ReplaceAllString(markdown, "")
-
-	// Ensure there's a maximum of one newline between lines
-	// Replace multiple newlines (\n) with a single newline
-	newlineRegex := regexp.MustCompile(`\n{2,}`)
-	markdown = newlineRegex.ReplaceAllString(markdown, "\n")
-
-	// Trim any leading or trailing whitespace or newlines
-	markdown = strings.TrimSpace(markdown)
-
-	return markdown, nil
-}
-func getProductsEndpoint(conf *Config) string {
-	return fmt.Sprintf(
-		"https://%s/wp-json/wc/v3/products?consumer_key=%s&consumer_secret=%s",
-		conf.Site, conf.WooConsumerKey, conf.WooConsumerSecret,
-	)
-}
-
-func readConfig(configPath string) (*Config, error) {
-	configFile, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	config := &Config{}
-	if err := yaml.Unmarshal(configFile, config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config file: %w", err)
-	}
-
-	return config, nil
-}
-
-func writeDefaultConfig(configPath string, defaultConfig *Config) error {
-	yamlData, err := yaml.Marshal(defaultConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal default config: %w", err)
-	}
-
-	if err := os.WriteFile(configPath, yamlData, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	fmt.Printf("Config file created at %s\n", configPath)
-	return nil
-}
-
 func GetProducts(conf *Config) ([]map[string]interface{}, error) {
 	client := resty.New()
 
@@ -167,18 +104,22 @@ I will provide:
 
 Your task is to:
 1. Understand the key product attributes, especially if it is RVP or LVT, and incorporate their unique features where applicable:
-   - **RVP (Rigid Vinyl Plank)**: Mention it has a rigid SPC core (Stone Polymer Composite) for dimensional stability, ultra-strong rigid construction for flat installation, and built-in acoustic underlay with sound absorption (e.g., 19db impact reduction). Highlight its fast deployment if the foundation is perfectly level.
+   - **RVP (Rigid Vinyl Plank)**: Mention its rigid SPC core (Stone Polymer Composite) for dimensional stability, ultra-strong rigid construction for flat installation, and built-in acoustic underlay for sound absorption (e.g., 19db impact reduction). Highlight its fast deployment if the foundation is perfectly level.
    - **LVT (Luxury Vinyl Tile)**: Emphasize it is multi-layered vinyl that replicates wood or stone, offering a durable, low-maintenance, and visually appealing solution.
 
-2. Create an SEO-friendly meta title (up to 60 characters) that:
+2. Create an SEO-friendly **meta title** (up to **60 characters**) that:
    - Clearly identifies the product type (e.g., RVP or LVT).
-   - Highlights unique benefits or specifications.
-   - Is concise and compelling.
+   - Highlights its unique benefits or specifications.
+   - Is concise, compelling, and within the 60-character limit.
 
-3. Generate a meta description (up to 160 characters) that:
+3. Generate an SEO-friendly **meta description** (up to **160 characters**) that:
    - Clearly explains the product and its use cases.
-   - Accurately summarizes its unique features and benefits.
-   - Follows Google's best practices (natural language, no keyword stuffing, relevant and helpful to users).
+   - Summarizes its unique features and benefits.
+   - Is concise, natural, and strictly under 160 characters.
+
+**Examples of Titles and Descriptions**:
+- Meta Title Example: "RVP Flooring with SPC Core | Durable & Quiet"
+- Meta Description Example: "Rigid Vinyl Plank with SPC core for stability, sound absorption, and fast installation. Perfect for level floors."
 
 4. Output your response as **valid JSON**, formatted like this:
 
@@ -188,9 +129,11 @@ Your task is to:
 }
 
 Important:
-- Use natural, human-readable language in both fields.
+- The **meta title** must be 60 characters or fewer.
+- The **meta description** must be 160 characters or fewer.
+- Use natural, human-readable language.
 - Do not include anything except the JSON object in your response.
-- The JSON must be valid and properly escaped.
+- Ensure the JSON is valid and properly escaped.
 
 Here is the product information:
 
@@ -243,8 +186,63 @@ Here is the product information:
 
 	return metaTitle, metaDescription, nil
 }
+func cleanHTMLToMarkdown(html string) (string, error) {
+	// Convert HTML to Markdown
+	markdown, err := htmltomarkdown.ConvertString(html)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// updateSEO updates the Yoast SEO meta fields for all WooCommerce products.
+	// Replace #### with ## for better readability
+	markdown = strings.ReplaceAll(markdown, "####", "##")
+
+	// Remove all images in the form ![](url)
+	// Regex pattern to match images in Markdown
+	imageRegex := regexp.MustCompile(`!\[.*?\]\(.*?\)`)
+	markdown = imageRegex.ReplaceAllString(markdown, "")
+
+	// Ensure there's a maximum of one newline between lines
+	// Replace multiple newlines (\n) with a single newline
+	newlineRegex := regexp.MustCompile(`\n{2,}`)
+	markdown = newlineRegex.ReplaceAllString(markdown, "\n")
+
+	// Trim any leading or trailing whitespace or newlines
+	markdown = strings.TrimSpace(markdown)
+
+	return markdown, nil
+}
+func getProductsEndpoint(conf *Config) string {
+	return fmt.Sprintf(
+		"https://%s/wp-json/wc/v3/products?consumer_key=%s&consumer_secret=%s",
+		conf.Site, conf.WooConsumerKey, conf.WooConsumerSecret,
+	)
+}
+func readConfig(configPath string) (*Config, error) {
+	configFile, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	config := &Config{}
+	if err := yaml.Unmarshal(configFile, config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config file: %w", err)
+	}
+
+	return config, nil
+}
+func writeDefaultConfig(configPath string, defaultConfig *Config) error {
+	yamlData, err := yaml.Marshal(defaultConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal default config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, yamlData, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	fmt.Printf("Config file created at %s\n", configPath)
+	return nil
+}
 func UpdateSEO(conf *Config) error {
 	client := resty.New()
 
@@ -352,7 +350,6 @@ func UpdateSEO(conf *Config) error {
 
 	return nil
 }
-
 func UploadImageToWordPress(conf *Config, imageDirPath string) error {
 	client := resty.New()
 
