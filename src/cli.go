@@ -21,6 +21,7 @@ func newRootCmd() *cobra.Command {
 		showVersion bool
 		configPath  string
 		imagesPath  string
+		autofill    bool
 	)
 
 	_, currentFilePath, _, ok := runtime.Caller(0)
@@ -61,19 +62,21 @@ func newRootCmd() *cobra.Command {
 				return
 			}
 
-			// if path exist continue
-
-			if PathExist(imagesPath) {
+			if configPath != "" && PathExist(imagesPath) {
 				fmt.Println(imagesPath)
 				UploadImageToWordPress(conf, imagesPath)
 			}
 
-		},
-	}
+			if autofill {
+				UpdateSEO(conf)
+			}
+
+		}}
 
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Get Version")
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "wooh.yaml", "Custom config path")
 	rootCmd.Flags().StringVarP(&imagesPath, "images-path", "p", ".", "Images Path")
+	rootCmd.Flags().BoolVarP(&autofill, "autofill", "a", false, "Yoast SEO Meta Data Autofill")
 
 	rootCmd.AddCommand(newCompletionCmd())
 

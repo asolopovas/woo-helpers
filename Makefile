@@ -1,6 +1,8 @@
 start:
 	go run ./main.go -c wooh.yaml -p images
 
+autofill:
+	go run ./main.go -a
 build:
 	go build -o ./dist/wooh ./main.go
 
