@@ -6,3 +6,4 @@ images/**
 !images/.gitkeep
 !images/sample.jpg
 products-cache.json
+seo-update-tracker.json

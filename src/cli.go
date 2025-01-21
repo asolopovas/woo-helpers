@@ -18,10 +18,11 @@ func Run() {
 
 func newRootCmd() *cobra.Command {
 	var (
-		showVersion bool
-		configPath  string
-		imagesPath  string
-		autofill    bool
+		showVersion   bool
+		configPath    string
+		imagesPath    string
+		autofill      bool
+		resetAutoFill bool
 	)
 
 	_, currentFilePath, _, ok := runtime.Caller(0)
@@ -68,7 +69,7 @@ func newRootCmd() *cobra.Command {
 			}
 
 			if autofill {
-				UpdateSEO(conf)
+				UpdateSEO(conf, autofill)
 			}
 
 		}}
@@ -77,6 +78,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "wooh.yaml", "Custom config path")
 	rootCmd.Flags().StringVarP(&imagesPath, "images-path", "p", ".", "Images Path")
 	rootCmd.Flags().BoolVarP(&autofill, "autofill", "a", false, "Yoast SEO Meta Data Autofill")
+	rootCmd.Flags().BoolVarP(&resetAutoFill, "resetAutofill", "r", false, "Reset Yoast Cache and Products Data")
 
 	rootCmd.AddCommand(newCompletionCmd())
 

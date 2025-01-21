@@ -42,7 +42,7 @@ type ProductMeta struct {
 }
 
 // -------------------------------------------------------------------
-// Simple file-based cache for products
+// File-based cache for products
 // -------------------------------------------------------------------
 type productCache struct {
 	Products   []map[string]interface{} `json:"products"`
@@ -89,6 +89,10 @@ func (pc *productCache) saveToCache(cacheFile string, products []map[string]inte
 		log.Printf("Warning: could not save cache file: %v", err)
 	}
 }
+
+// -------------------------------------------------------------------
+// Config Operations
+// -------------------------------------------------------------------
 func GetConfig(configPath string) (*Config, error) {
 	defaultConfig := &Config{
 		Site:              "domain.com",
@@ -108,14 +112,44 @@ func GetConfig(configPath string) (*Config, error) {
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if err := writeDefaultConfig(configPath, defaultConfig); err != nil {
+		if err := WriteDefaultConfig(configPath, defaultConfig); err != nil {
 			return nil, err
 		}
 		return defaultConfig, nil
 	}
 
-	return readConfig(configPath)
+	return ReadConfig(configPath)
 }
+func ReadConfig(configPath string) (*Config, error) {
+	configFile, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	config := &Config{}
+	if err := yaml.Unmarshal(configFile, config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config file: %w", err)
+	}
+
+	return config, nil
+}
+func WriteDefaultConfig(configPath string, defaultConfig *Config) error {
+	yamlData, err := yaml.Marshal(defaultConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal default config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, yamlData, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	fmt.Printf("Config file created at %s\n", configPath)
+	return nil
+}
+
+// -------------------------------------------------------------------
+// Fetch WooCommerce products, with cache
+// -------------------------------------------------------------------
 func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]map[string]interface{}, error) {
 	var pc productCache
 
@@ -168,6 +202,10 @@ func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]m
 	pc.saveToCache(cacheFile, allProducts)
 	return allProducts, nil
 }
+
+// -------------------------------------------------------------------
+// OpenAI logic (unchanged)
+// -------------------------------------------------------------------
 func OpenAIProcess(conf *Config, productName, shortDescription, description string, categories []interface{}) (string, string, error) {
 	client := openai.NewClient(conf.OpenAIKey)
 	prompt := fmt.Sprintf(`
@@ -263,6 +301,10 @@ Here is the product information:
 
 	return metaTitle, metaDescription, nil
 }
+
+// -------------------------------------------------------------------
+// Helper to convert HTML to Markdown (unchanged)
+// -------------------------------------------------------------------
 func cleanHTMLToMarkdown(html string) (string, error) {
 	// Convert HTML to Markdown
 	markdown, err := htmltomarkdown.ConvertString(html)
@@ -288,48 +330,84 @@ func cleanHTMLToMarkdown(html string) (string, error) {
 
 	return markdown, nil
 }
-func readConfig(configPath string) (*Config, error) {
-	configFile, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
 
-	config := &Config{}
-	if err := yaml.Unmarshal(configFile, config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config file: %w", err)
-	}
-
-	return config, nil
+// -------------------------------------------------------------------
+// SEO update tracker struct + helpers
+// -------------------------------------------------------------------
+type seoUpdateTracker struct {
+	UpdatedIDs map[float64]bool `json:"updated_ids"`
 }
-func writeDefaultConfig(configPath string, defaultConfig *Config) error {
-	yamlData, err := yaml.Marshal(defaultConfig)
+
+func loadSEOUpdateTracker(filename string) (*seoUpdateTracker, error) {
+	t := &seoUpdateTracker{UpdatedIDs: make(map[float64]bool)}
+	data, err := os.ReadFile(filename)
 	if err != nil {
-		return fmt.Errorf("failed to marshal default config: %w", err)
+		if os.IsNotExist(err) {
+			return t, nil // no file yet, return empty
+		}
+		return nil, err
 	}
-
-	if err := os.WriteFile(configPath, yamlData, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+	if err := json.Unmarshal(data, t); err != nil {
+		return nil, err
 	}
-
-	fmt.Printf("Config file created at %s\n", configPath)
-	return nil
+	return t, nil
 }
-func UpdateSEO(conf *Config) error {
+
+func (t *seoUpdateTracker) save(filename string) error {
+	data, err := json.Marshal(t)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, data, 0644)
+}
+
+// -------------------------------------------------------------------
+// UpdateSEO now has a restartTracking param and uses the tracker
+// -------------------------------------------------------------------
+func UpdateSEO(conf *Config, restartTracking bool) error {
 	client := resty.New()
 
+	// Load or reset tracker
+	trackerFile := "seo-update-tracker.json"
+	var tracker *seoUpdateTracker
+	if restartTracking {
+		// Clear old data
+		tracker = &seoUpdateTracker{UpdatedIDs: make(map[float64]bool)}
+	} else {
+		// Load existing file if any
+		var err error
+		tracker, err = loadSEOUpdateTracker(trackerFile)
+		if err != nil {
+			return fmt.Errorf("failed to load SEO update tracker: %w", err)
+		}
+	}
+
+	// Get products
 	cacheFile := "products-cache.json"
 	maxCacheAge := 24 * time.Hour
 	products, err := GetProducts(conf, cacheFile, maxCacheAge)
 	if err != nil {
 		return fmt.Errorf("failed to fetch products: %w", err)
 	}
-    // print products length
-    fmt.Printf("Products To Be Processed: %d\n", len(products))
+	fmt.Printf("Products To Be Processed: %d\n", len(products))
 
-	reader := bufio.NewReader(os.Stdin) // For user input
+	reader := bufio.NewReader(os.Stdin)
 
 	for _, product := range products {
-		productID := product["id"]
+		rawID := product["id"]
+		idFloat, ok := rawID.(float64)
+		if !ok {
+			log.Printf("Skipping product with invalid ID type: %v\n", rawID)
+			continue
+		}
+
+		// Skip if this ID is already updated in the tracker
+		if tracker.UpdatedIDs[idFloat] {
+			log.Printf("Skipping product ID %v (already updated)\n", idFloat)
+			continue
+		}
+
+		productID := int(idFloat)
 		productName, _ := product["name"].(string)
 		shortDescription, _ := product["short_description"].(string)
 		description, _ := product["description"].(string)
@@ -340,30 +418,25 @@ func UpdateSEO(conf *Config) error {
 			return fmt.Errorf("failed to clean description for product ID %v: %w", productID, err)
 		}
 
-		// Constants for character limits
 		const maxTitleLength = 60
 		const maxDescriptionLength = 160
 
 		var metaTitle, metaDescription string
 		retries := 10
 
-		// Retry loop for generating valid meta title and description
 		for i := 0; i < retries; i++ {
 			metaTitle, metaDescription, err = OpenAIProcess(conf, productName, shortDescription, cleanedDescription, categories)
 			if err != nil {
 				log.Printf("Error generating meta fields for product ID %v: %v", productID, err)
 				continue
 			}
-
-			// Validate the length of the meta fields
 			if len(metaTitle) <= maxTitleLength && len(metaDescription) <= maxDescriptionLength {
-				break // Valid meta fields
+				break
 			} else {
-				log.Printf("Meta fields exceeded character limits for product ID %v (attempt %d/%d)", productID, i+1, retries)
+				log.Printf("Meta fields exceeded char limits for product ID %v (attempt %d/%d)", productID, i+1, retries)
 			}
 		}
 
-		// Check if valid meta fields were generated after retries
 		if len(metaTitle) > maxTitleLength || len(metaDescription) > maxDescriptionLength {
 			log.Printf("Failed to generate valid meta fields for product ID %v after %d retries", productID, retries)
 			continue
@@ -372,6 +445,7 @@ func UpdateSEO(conf *Config) error {
 		fmt.Println("Meta Title: " + metaTitle)
 		fmt.Println("Meta Description: " + metaDescription)
 
+		skipThisProduct := false
 		for {
 			fmt.Println("Do you approve these values? (y/n): ")
 			input, _ := reader.ReadString('\n')
@@ -381,51 +455,54 @@ func UpdateSEO(conf *Config) error {
 				break
 			} else if input == "n" {
 				fmt.Println("Skipping this product...")
-				continue
+				skipThisProduct = true
+				break
 			} else {
-				fmt.Println("Invalid input. Please enter 'y' for yes or 'n' for no.")
+				fmt.Println("Invalid input. Please enter 'y' or 'n'.")
 			}
 		}
 
-		// Update the product's Yoast SEO fields
-		updatePayload := map[string]interface{}{
-			"meta_data": []map[string]string{
-				{
-					"key":   "_yoast_wpseo_title",
-					"value": metaTitle,
-				},
-				{
-					"key":   "_yoast_wpseo_metadesc",
-					"value": metaDescription,
-				},
-			},
+		if skipThisProduct {
+			continue
 		}
 
+		// Update the product
+		updatePayload := map[string]interface{}{
+			"meta_data": []map[string]string{
+				{"key": "_yoast_wpseo_title", "value": metaTitle},
+				{"key": "_yoast_wpseo_metadesc", "value": metaDescription},
+			},
+		}
 		productEndpoint := fmt.Sprintf(
 			"https://%s/wp-json/wc/v3/products/%v?consumer_key=%s&consumer_secret=%s",
 			conf.Site, productID, conf.WooConsumerKey, conf.WooConsumerSecret,
 		)
-
 		resp, err := client.R().
 			SetHeader("Content-Type", "application/json").
 			SetBody(updatePayload).
 			Put(productEndpoint)
-
 		if err != nil {
 			log.Printf("Failed to update SEO for product ID %v: %v", productID, err)
 			continue
 		}
-
 		if resp.IsError() {
 			log.Printf("API error updating SEO for product ID %v: %s", productID, resp.String())
 			continue
 		}
 
 		log.Printf("Successfully updated SEO for product ID %v", productID)
+
+		// Mark this ID as updated in the tracker
+		tracker.UpdatedIDs[idFloat] = true
+		if err := tracker.save(trackerFile); err != nil {
+			log.Printf("Warning: could not save SEO tracker file: %v", err)
+		}
 	}
 
 	return nil
-}func UploadImageToWordPress(conf *Config, imageDirPath string) error {
+}
+
+func UploadImageToWordPress(conf *Config, imageDirPath string) error {
 	client := resty.New()
 
 	files, err := os.ReadDir(imageDirPath)
