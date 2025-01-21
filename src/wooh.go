@@ -144,16 +144,9 @@ func ListProductMeta(conf *Config) {
 // OpenAI logic (unchanged)
 // -------------------------------------------------------------------
 
-func OpenAiGenPrompt(productName string, shortDescription string, description string, categories []WooCategory) string {
-	return fmt.Sprintf(`
-You are an experienced SEO specialist and copywriter with expertise in flooring materials like RVP (Rigid Vinyl Plank) and LVT (Luxury Vinyl Tile).
-
-I will provide:
-- A product's name
-- A short description
-- A detailed description (in Markdown/HTML)
-- A list of categories.
-
+func OpenAIGenSystemPrompt() string {
+	return `
+You are an exprienced SEO specialist and copywriter with expertise in flooring materials like RVP (Rigid Vinyl Plank) and LVT (Luxury Vinyl Tile).
 Your task is to:
 1. Understand the key product attributes, especially if it is RVP or LVT, and incorporate their unique features where applicable:
    - **RVP (Rigid Vinyl Plank)**: Mention its rigid SPC core (Stone Polymer Composite) for dimensional stability, ultra-strong rigid construction for flat installation, and built-in acoustic underlay for sound absorption (e.g., 19db impact reduction). Highlight its fast deployment if the foundation is perfectly level.
@@ -169,17 +162,6 @@ Your task is to:
    - Summarizes its unique features and benefits.
    - Is concise, natural, and strictly under 160 characters.
 
-**Examples of Titles and Descriptions**:
-- Meta Title Example: "RVP Flooring with SPC Core | Durable & Quiet"
-- Meta Description Example: "Rigid Vinyl Plank with SPC core for stability, sound absorption, and fast installation. Perfect for level floors."
-
-4. Output your response as **valid JSON**, formatted like this:
-
-{
-  "meta_title": "Your meta title here",
-  "meta_description": "Your meta description here"
-}
-
 Important:
 - The **meta title** must be 60 characters or fewer.
 - The **meta description** must be 160 characters or fewer.
@@ -187,16 +169,28 @@ Important:
 - Do not include anything except the JSON object in your response.
 - Ensure the JSON is valid and properly escaped.
 
-Here is the product information:
+**Examples of Titles and Descriptions**:
+- Meta Title Example: "RVP Flooring with SPC Core | Durable & Quiet"
+- Meta Description Example: "Rigid Vinyl Plank with SPC core for stability, 19db sound absorption, and fast installation. Perfect for level floors."
+`
+}
+func OpenAIUserPrompt(productName string, shortDescription string, description string, categories []WooCategory) string {
+	return fmt.Sprintf(`
+I will provide:
+- A product's name
+- A short description
+- A detailed description (in Markdown/HTML)
+- A list of categories.
 
+
+Here is the product information:
 - Product Name: %s
 - Short Description: %s
 - Full Description (may include Markdown/HTML): %s
 - Categories: %v
 `, productName, shortDescription, description, categories)
-
 }
-func OpenAIProcess(conf *Config, prompt string) (string, string, error) {
+func OpenAIProcess(conf *Config, userPrompt string) (string, string, error) {
 	client := openai.NewClient(conf.OpenAIKey)
 
 	var responseStruct JSONResponse
@@ -208,11 +202,15 @@ func OpenAIProcess(conf *Config, prompt string) (string, string, error) {
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT3Dot5Turbo1106,
+			Model: openai.GPT4oMini,
 			Messages: []openai.ChatCompletionMessage{
 				{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: OpenAIGenSystemPrompt(),
+				},
+				{
 					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
+					Content: userPrompt,
 				},
 			},
 			ResponseFormat: &openai.ChatCompletionResponseFormat{
@@ -335,8 +333,8 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		retries := 10
 
 		for i := 0; i < retries; i++ {
-			prompt := OpenAiGenPrompt(productName, shortDescription, cleanedDescription, categories)
-			metaTitle, metaDescription, err = OpenAIProcess(conf, prompt)
+			userPrompt := OpenAIUserPrompt(productName, shortDescription, cleanedDescription, categories)
+			metaTitle, metaDescription, err = OpenAIProcess(conf, userPrompt)
 			if err != nil {
 				log.Printf("Error generating meta fields for product ID %v: %v", productID, err)
 				continue
