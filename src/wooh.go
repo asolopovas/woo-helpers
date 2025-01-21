@@ -335,15 +335,17 @@ func cleanHTMLToMarkdown(html string) (string, error) {
 // SEO update tracker struct + helpers
 // -------------------------------------------------------------------
 type seoUpdateTracker struct {
-	UpdatedIDs map[float64]bool `json:"updated_ids"`
+	UpdatedIDs map[int]bool `json:"updated_ids"`
+	mu         sync.Mutex
 }
 
 func loadSEOUpdateTracker(filename string) (*seoUpdateTracker, error) {
-	t := &seoUpdateTracker{UpdatedIDs: make(map[float64]bool)}
+	t := &seoUpdateTracker{UpdatedIDs: make(map[int]bool)}
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return t, nil // no file yet, return empty
+			// no file yet, return empty
+			return t, nil
 		}
 		return nil, err
 	}
@@ -354,6 +356,9 @@ func loadSEOUpdateTracker(filename string) (*seoUpdateTracker, error) {
 }
 
 func (t *seoUpdateTracker) save(filename string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	data, err := json.Marshal(t)
 	if err != nil {
 		return err
@@ -367,12 +372,11 @@ func (t *seoUpdateTracker) save(filename string) error {
 func UpdateSEO(conf *Config, restartTracking bool) error {
 	client := resty.New()
 
-	// Load or reset tracker
 	trackerFile := "seo-update-tracker.json"
 	var tracker *seoUpdateTracker
 	if restartTracking {
 		// Clear old data
-		tracker = &seoUpdateTracker{UpdatedIDs: make(map[float64]bool)}
+		tracker = &seoUpdateTracker{UpdatedIDs: make(map[int]bool)}
 	} else {
 		// Load existing file if any
 		var err error
@@ -401,13 +405,15 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 			continue
 		}
 
+		// Convert float64 -> int for the actual product ID
+		productID := int(idFloat)
+
 		// Skip if this ID is already updated in the tracker
-		if tracker.UpdatedIDs[idFloat] {
-			log.Printf("Skipping product ID %v (already updated)\n", idFloat)
+		if tracker.UpdatedIDs[productID] {
+			log.Printf("Skipping product ID %v (already updated)\n", productID)
 			continue
 		}
 
-		productID := int(idFloat)
 		productName, _ := product["name"].(string)
 		shortDescription, _ := product["short_description"].(string)
 		description, _ := product["description"].(string)
@@ -466,21 +472,30 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 			continue
 		}
 
-		// Update the product
+		// Update the product on WooCommerce
 		updatePayload := map[string]interface{}{
 			"meta_data": []map[string]string{
-				{"key": "_yoast_wpseo_title", "value": metaTitle},
-				{"key": "_yoast_wpseo_metadesc", "value": metaDescription},
+				{
+					"key":   "_yoast_wpseo_title",
+					"value": metaTitle,
+				},
+				{
+					"key":   "_yoast_wpseo_metadesc",
+					"value": metaDescription,
+				},
 			},
 		}
+
 		productEndpoint := fmt.Sprintf(
 			"https://%s/wp-json/wc/v3/products/%v?consumer_key=%s&consumer_secret=%s",
 			conf.Site, productID, conf.WooConsumerKey, conf.WooConsumerSecret,
 		)
+
 		resp, err := client.R().
 			SetHeader("Content-Type", "application/json").
 			SetBody(updatePayload).
 			Put(productEndpoint)
+
 		if err != nil {
 			log.Printf("Failed to update SEO for product ID %v: %v", productID, err)
 			continue
@@ -493,7 +508,7 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 		log.Printf("Successfully updated SEO for product ID %v", productID)
 
 		// Mark this ID as updated in the tracker
-		tracker.UpdatedIDs[idFloat] = true
+		tracker.UpdatedIDs[productID] = true
 		if err := tracker.save(trackerFile); err != nil {
 			log.Printf("Warning: could not save SEO tracker file: %v", err)
 		}
