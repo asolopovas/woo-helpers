@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	// imported as openai
 	"github.com/go-resty/resty/v2"
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer/html"
 	"gopkg.in/yaml.v3"
 )
 
@@ -65,10 +68,22 @@ type ProductMeta struct {
 }
 
 func cleanHTMLToMarkdown(html string) (string, error) {
+	// Log the HTML input for debugging
+	fmt.Println("HTML Input for Markdown Conversion:", html)
+
+	// Preprocess the HTML to clean up comments and unsupported tags
+	cleanedHTML := preprocessHTML(html)
+
+	// Use the custom Markdown converter
+	markdownConverter := newMarkdownConverter()
+
+	// Use a buffer to capture the Markdown output
 	var buf bytes.Buffer
-	if err := goldmark.Convert([]byte(html), &buf); err != nil {
+	err := markdownConverter.Convert([]byte(cleanedHTML), &buf)
+	if err != nil {
 		return "", fmt.Errorf("failed to convert HTML to Markdown: %w", err)
 	}
+
 	return buf.String(), nil
 }
 
@@ -79,6 +94,17 @@ func getProductsEndpoint(conf *Config) string {
 	)
 }
 
+func newMarkdownConverter() goldmark.Markdown {
+	return goldmark.New(
+		goldmark.WithParserOptions(
+			parser.WithAutoHeadingID(),
+			parser.WithAttribute(),
+		),
+		goldmark.WithRendererOptions(
+			html.WithUnsafe(), // Alternative for older versions
+		),
+	)
+}
 func readConfig(configPath string) (*Config, error) {
 	configFile, err := os.ReadFile(configPath)
 	if err != nil {
@@ -91,6 +117,25 @@ func readConfig(configPath string) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func preprocessHTML(html string) string {
+	// Remove WordPress comments like <!-- wp:heading -->
+	html = strings.ReplaceAll(html, "<!-- wp:heading -->", "")
+	html = strings.ReplaceAll(html, "<!-- /wp:heading -->", "")
+	html = strings.ReplaceAll(html, "<!-- wp:paragraph -->", "")
+	html = strings.ReplaceAll(html, "<!-- /wp:paragraph -->", "")
+	html = strings.ReplaceAll(html, "<!-- wp:image -->", "")
+	html = strings.ReplaceAll(html, "<!-- /wp:image -->", "")
+	html = strings.ReplaceAll(html, "<!-- wp:table -->", "")
+	html = strings.ReplaceAll(html, "<!-- /wp:table -->", "")
+
+	// Clean up any remaining WordPress block tags
+	html = strings.ReplaceAll(html, "<!-- wp:generateblocks/container -->", "")
+	html = strings.ReplaceAll(html, "<!-- /wp:generateblocks/container -->", "")
+
+	// Return the cleaned HTML
+	return html
 }
 
 func writeDefaultConfig(configPath string, defaultConfig *Config) error {
@@ -179,10 +224,10 @@ func UpdateSEO(conf *Config) error {
 
 	for _, product := range products {
 		productID := product["id"]
-		productName, _ := product["name"].(string)
-		shortDescription, _ := product["short_description"].(string)
+		// productName, _ := product["name"].(string)
+		// shortDescription, _ := product["short_description"].(string)
 		description, _ := product["description"].(string)
-		categories, _ := product["categories"].([]interface{})
+		// categories, _ := product["categories"].([]interface{})
 
 		cleanedDescription, err := cleanHTMLToMarkdown(description)
 		if err != nil {
@@ -192,12 +237,12 @@ func UpdateSEO(conf *Config) error {
 		fmt.Println(cleanedDescription)
 		fmt.Println("-------------------------")
 
-		metaTitle, metaDescription, err := OpenAIProcess(conf, productName, shortDescription, cleanedDescription, categories)
-		if err != nil {
-			return fmt.Errorf("failed to process OpenAI for product ID %v: %w", productID, err)
-		}
+		// metaTitle, metaDescription, err := OpenAIProcess(conf, productName, shortDescription, cleanedDescription, categories)
+		// if err != nil {
+		// 	return fmt.Errorf("failed to process OpenAI for product ID %v: %w", productID, err)
+		// }
 
-		fmt.Println(metaTitle, metaDescription)
+		// fmt.Println(metaTitle, metaDescription)
 
 		// Update the product's Yoast SEO fields
 		// updatePayload := map[string]interface{}{
