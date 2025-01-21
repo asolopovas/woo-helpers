@@ -128,26 +128,17 @@ func ListProductMeta(conf *Config) {
 		fmt.Printf("ID: %v\n", product.ID)
 		fmt.Printf("Name: %v\n", product.Name)
 
-		// Look for meta_data entry with key == "yoast_head_json"
-		var yoastHead map[string]interface{} // The "value" can be a map with "og_title", "og_description", etc.
-		for _, md := range product.MetaData {
-			if md.Key == "yoast_head_json" {
-				// If "value" is the actual JSON object, parse or cast it to a map
-				if val, ok := md.Value.(map[string]interface{}); ok {
-					yoastHead = val
-				}
-				break
+		// Extract and print specific metadata values
+		for _, meta := range product.MetaData {
+			switch meta.Key {
+			case "_yoast_wpseo_title":
+				fmt.Printf("Yoast Title: %v\n", meta.Value)
+			case "_yoast_wpseo_metadesc":
+				fmt.Printf("Yoast Meta Description: %v\n", meta.Value)
 			}
 		}
 
-		if yoastHead != nil {
-			ogTitle, _ := yoastHead["og_title"].(string)
-			ogDescription, _ := yoastHead["og_description"].(string)
-			fmt.Printf("SEO Title: %s\n", ogTitle)
-			fmt.Printf("SEO Description: %s\n", ogDescription)
-		} else {
-			fmt.Println("No yoast_head_json found for this product.")
-		}
+		fmt.Println()
 	}
 }
 
