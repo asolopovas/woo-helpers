@@ -12,10 +12,9 @@ import (
 	"sync"
 	"time"
 
-	// imported as openai
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
-	"github.com/go-resty/resty/v2"             // imported as openai
-	openai "github.com/sashabaranov/go-openai" // For OpenAI usage
+	"github.com/go-resty/resty/v2"
+	openai "github.com/sashabaranov/go-openai"
 )
 
 type Category struct {
