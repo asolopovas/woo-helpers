@@ -20,8 +20,8 @@ type Config struct {
 	WpKey             string      `yaml:"wp_key"`
 	WooConsumerKey    string      `yaml:"consumer_key"`
 	WooConsumerSecret string      `yaml:"consumer_secret"`
-	ProductCachePath  string      `yaml:"product_cache_path"`
-	TrackerPath       string      `yaml:"tracker_path"`
+	CacheFilename     string      `yaml:"cache_filename"`
+	TrackerFilename   string      `yaml:"tracker_filename"`
 	ProductMeta       ProductMeta `yaml:"product_meta"`
 }
 type ProductCache struct {
@@ -83,7 +83,7 @@ func (pc *ProductCache) FetchFromCache(cacheFilePath string, maxAge time.Duratio
 	}
 	return nil, nil
 }
-func (pc *ProductCache) SaveToCache(productCacheFilePath string, products []WooProduct) {
+func (pc *ProductCache) SaveToCache(cacheFilePath string, products []WooProduct) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 
@@ -109,13 +109,13 @@ func (pc *ProductCache) SaveToCache(productCacheFilePath string, products []WooP
 		return
 	}
 
-	dir := filepath.Dir(productCacheFilePath)
+	dir := filepath.Dir(cacheFilePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Printf("Warning: could not create directory for cache file: %v", err)
 		return
 	}
 
-	if err := os.WriteFile(productCacheFilePath, data, 0644); err != nil {
+	if err := os.WriteFile(cacheFilePath, data, 0644); err != nil {
 		log.Printf("Warning: could not save cache file: %v", err)
 	}
 }
@@ -149,8 +149,8 @@ func GetConfig(configPath string) (*Config, error) {
 		WpKey:             "",
 		WooConsumerKey:    "woo_consumer_key",
 		WooConsumerSecret: "woo_consumer_secret",
-		TrackerPath:       "tracker-state.json",
-		ProductCachePath:  "products-cache.json",
+		TrackerFilename:   "tracker-state.json",
+		CacheFilename:     "products-cache.json",
 		ProductMeta: ProductMeta{
 			Type:             "simple",
 			RegularPrice:     "0.00",

@@ -54,7 +54,7 @@ func GetProducts(conf *Config, maxCacheAge time.Duration) ([]WooProduct, error) 
 	var pc ProductCache
 	dir, err := os.Getwd()
 	ErrChk(err)
-	productCacheFilePath := filepath.Join(dir, ".wooh-output", conf.ProductCachePath)
+	productCacheFilePath := filepath.Join(dir, ".wooh-output", conf.CacheFilename)
 	fmt.Println(productCacheFilePath)
 
 	if cachedData, err := pc.FetchFromCache(productCacheFilePath, maxCacheAge); err == nil && cachedData != nil {
@@ -258,7 +258,7 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		tracker = &TrackerUpdate{UpdatedIDs: make(map[int]bool)}
 	} else {
 		var err error
-		tracker, err = TrackerLoad(conf.TrackerPath)
+		tracker, err = TrackerLoad(conf.TrackerFilename)
 		if err != nil {
 			return fmt.Errorf("failed to load SEO update tracker: %w", err)
 		}
@@ -377,7 +377,7 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		log.Printf("Successfully updated SEO for product ID %v", productID)
 
 		tracker.UpdatedIDs[productID] = true
-		if err := tracker.save(conf.TrackerPath); err != nil {
+		if err := tracker.save(conf.TrackerFilename); err != nil {
 			log.Printf("Warning: could not save SEO tracker file: %v", err)
 		}
 	}
