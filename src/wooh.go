@@ -452,21 +452,21 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 		fmt.Println("Meta Description: " + metaDescription)
 
 		skipThisProduct := false
-		for {
-			fmt.Println("Do you approve these values? (y/n): ")
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input)
+		// for {
+		// 	fmt.Println("Do you approve these values? (y/n): ")
+		// 	input, _ := reader.ReadString('\n')
+		// 	input = strings.TrimSpace(input)
 
-			if input == "y" {
-				break
-			} else if input == "n" {
-				fmt.Println("Skipping this product...")
-				skipThisProduct = true
-				break
-			} else {
-				fmt.Println("Invalid input. Please enter 'y' or 'n'.")
-			}
-		}
+		// 	if input == "y" {
+		// 		break
+		// 	} else if input == "n" {
+		// 		fmt.Println("Skipping this product...")
+		// 		skipThisProduct = true
+		// 		break
+		// 	} else {
+		// 		fmt.Println("Invalid input. Please enter 'y' or 'n'.")
+		// 	}
+		// }
 
 		if skipThisProduct {
 			continue
