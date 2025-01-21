@@ -18,12 +18,13 @@ func Run() {
 
 func newRootCmd() *cobra.Command {
 	var (
-		showVersion   bool
-		configPath    string
-		imagesPath    string
-		autofill      bool
-		resetAutoFill bool
-		prompt        bool
+		showVersion     bool
+		configPath      string
+		imagesPath      string
+		autofill        bool
+		resetAutoFill   bool
+		prompt          bool
+		listProductMeta bool
 	)
 
 	_, currentFilePath, _, ok := runtime.Caller(0)
@@ -81,6 +82,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.Flags().BoolVarP(&autofill, "autofill", "a", false, "Yoast SEO Meta Data Autofill")
 	rootCmd.Flags().BoolVarP(&resetAutoFill, "resetAutofill", "r", false, "Reset Yoast Cache and Products Data")
 	rootCmd.Flags().BoolVarP(&prompt, "prompt", "p", false, "Prompt for confirmation for each product")
+	rootCmd.Flags().BoolVarP(&listProductMeta, "listProductMeta", "l", false, "List Product Meta")
 
 	rootCmd.AddCommand(newCompletionCmd())
 
