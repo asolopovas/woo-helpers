@@ -3,6 +3,7 @@ package wooh
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -115,7 +116,6 @@ func GetProducts(conf *Config, maxCacheAge time.Duration) ([]WooProduct, error) 
 	pc.SaveToCache(cacheFilePath, allProducts)
 	return allProducts, nil
 }
-
 func ListProductMeta(conf *Config) {
 	products, err := GetProducts(conf, 24*time.Hour)
 	if err != nil {
@@ -143,7 +143,6 @@ func ListProductMeta(conf *Config) {
 // -------------------------------------------------------------------
 // OpenAI logic (unchanged)
 // -------------------------------------------------------------------
-
 func OpenAIGenSystemPrompt() string {
 	return `
 You are an exprienced SEO specialist and copywriter with expertise in flooring materials like RVP (Rigid Vinyl Plank) and LVT (Luxury Vinyl Tile).
@@ -275,6 +274,8 @@ func cleanHTMLToMarkdown(html string) (string, error) {
 // -------------------------------------------------------------------
 func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	client := resty.New()
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+
 	dir, err := os.Getwd()
 	ErrChk(err)
 	cacheDir := filepath.Join(dir, ".wooh-output")
@@ -330,7 +331,7 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		const maxDescriptionLength = 160
 
 		var metaTitle, metaDescription string
-		retries := 10
+		retries := 1
 
 		for i := 0; i < retries; i++ {
 			userPrompt := OpenAIUserPrompt(productName, shortDescription, cleanedDescription, categories)
