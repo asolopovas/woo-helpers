@@ -345,7 +345,6 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 			continue
 		}
 
-		// Update the product on WooCommerce
 		updatePayload := map[string]interface{}{
 			"meta_data": []map[string]string{
 				{
@@ -380,7 +379,6 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 
 		log.Printf("Successfully updated SEO for product ID %v", productID)
 
-		// Mark this ID as updated in the tracker
 		tracker.UpdatedIDs[productID] = true
 		if err := tracker.save(trackerFile); err != nil {
 			log.Printf("Warning: could not save SEO tracker file: %v", err)
