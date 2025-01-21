@@ -23,6 +23,7 @@ func newRootCmd() *cobra.Command {
 		imagesPath    string
 		autofill      bool
 		resetAutoFill bool
+		prompt        bool
 	)
 
 	_, currentFilePath, _, ok := runtime.Caller(0)
@@ -69,7 +70,7 @@ func newRootCmd() *cobra.Command {
 			}
 
 			if autofill {
-				UpdateSEO(conf, resetAutoFill)
+				UpdateSEO(conf, resetAutoFill, prompt)
 			}
 
 		}}
@@ -79,6 +80,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.Flags().StringVarP(&imagesPath, "images-path", "p", ".", "Images Path")
 	rootCmd.Flags().BoolVarP(&autofill, "autofill", "a", false, "Yoast SEO Meta Data Autofill")
 	rootCmd.Flags().BoolVarP(&resetAutoFill, "resetAutofill", "r", false, "Reset Yoast Cache and Products Data")
+	rootCmd.Flags().BoolVarP(&prompt, "prompt", "p", false, "Prompt for confirmation for each product")
 
 	rootCmd.AddCommand(newCompletionCmd())
 
