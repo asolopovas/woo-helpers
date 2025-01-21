@@ -54,10 +54,14 @@ func GetProducts(conf *Config, maxCacheAge time.Duration) ([]WooProduct, error) 
 	var pc ProductCache
 	dir, err := os.Getwd()
 	ErrChk(err)
-	productCacheFilePath := filepath.Join(dir, ".wooh-output", conf.CacheFilename)
-	fmt.Println(productCacheFilePath)
+	cacheDir := filepath.Join(dir, ".wooh-output")
+	if PathExist(cacheDir) == false {
+		err := os.Mkdir(cacheDir, 0755)
+		ErrChk(err)
+	}
+	cacheFilePath := filepath.Join(cacheDir, conf.CacheFilename)
 
-	if cachedData, err := pc.FetchFromCache(productCacheFilePath, maxCacheAge); err == nil && cachedData != nil {
+	if cachedData, err := pc.FetchFromCache(cacheFilePath, maxCacheAge); err == nil && cachedData != nil {
 		jsonBytes, err := json.Marshal(cachedData)
 		if err == nil {
 			var cachedProducts []WooProduct
@@ -103,7 +107,7 @@ func GetProducts(conf *Config, maxCacheAge time.Duration) ([]WooProduct, error) 
 		page++
 	}
 
-	pc.SaveToCache(productCacheFilePath, allProducts)
+	pc.SaveToCache(cacheFilePath, allProducts)
 	return allProducts, nil
 }
 
