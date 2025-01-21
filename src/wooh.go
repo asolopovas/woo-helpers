@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	// imported as openai
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
@@ -66,11 +68,27 @@ type ProductMeta struct {
 }
 
 func cleanHTMLToMarkdown(html string) (string, error) {
-
+	// Convert HTML to Markdown
 	markdown, err := htmltomarkdown.ConvertString(html)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Replace #### with ## for better readability
+	markdown = strings.ReplaceAll(markdown, "####", "##")
+
+	// Remove all images in the form ![](url)
+	// Regex pattern to match images in Markdown
+	imageRegex := regexp.MustCompile(`!\[.*?\]\(.*?\)`)
+	markdown = imageRegex.ReplaceAllString(markdown, "")
+
+	// Ensure there's a maximum of one newline between lines
+	// Replace multiple newlines (\n) with a single newline
+	newlineRegex := regexp.MustCompile(`\n{2,}`)
+	markdown = newlineRegex.ReplaceAllString(markdown, "\n")
+
+	// Trim any leading or trailing whitespace or newlines
+	markdown = strings.TrimSpace(markdown)
 
 	return markdown, nil
 }
@@ -190,7 +208,6 @@ func UpdateSEO(conf *Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to clean description for product ID %v: %w", productID, err)
 		}
-		fmt.Println("-------------------------")
 		fmt.Println(cleanedDescription)
 		fmt.Println("-------------------------")
 
