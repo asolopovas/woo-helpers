@@ -105,21 +105,6 @@ func (pc *ProductCache) SaveToCache(cacheFile string, products []WooProduct) {
 		log.Printf("Warning: could not save cache file: %v", err)
 	}
 }
-func ErrChk(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-func PathExist(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	if os.IsNotExist(err) {
-		return false
-	}
-	return true
-}
 func Contains(strRange []string, pattern string) bool {
 	for _, val := range strRange {
 		match, _ := regexp.MatchString(pattern, val)
@@ -127,6 +112,11 @@ func Contains(strRange []string, pattern string) bool {
 	}
 
 	return false
+}
+func ErrChk(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 func Filter(arr []string, cond func(string) bool) []string {
 	result := []string{}
@@ -163,6 +153,16 @@ func GetConfig(configPath string) (*Config, error) {
 	}
 
 	return ReadConfig(configPath)
+}
+func PathExist(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return true
 }
 func ReadConfig(configPath string) (*Config, error) {
 	configFile, err := os.ReadFile(configPath)
