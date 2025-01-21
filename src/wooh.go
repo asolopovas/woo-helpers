@@ -157,28 +157,40 @@ func GetProducts(conf *Config) ([]map[string]interface{}, error) {
 func OpenAIProcess(conf *Config, productName, shortDescription, description string, categories []interface{}) (string, string, error) {
 	client := openai.NewClient(conf.OpenAIKey)
 	prompt := fmt.Sprintf(`
-You are an experienced SEO specialist.
-I will provide a product’s name, a short description, a detailed description (in Markdown/HTML),
-and a list of categories.
+You are an experienced SEO specialist and copywriter with expertise in flooring materials like RVP (Rigid Vinyl Plank) and LVT (Luxury Vinyl Tile).
 
-Your task:
-1. Read and understand the product information.
-2. Generate a concise and informative meta title (up to 60 characters).
-3. Generate a meta description (up to 160 characters) that follows Google's best practices:
-   - Accurately summarize the product.
-   - Use natural, human-readable language.
-   - Avoid keyword stuffing; keep it relevant and helpful.
-   - Include key specs only if they add real value.
-4. Format your response strictly as valid JSON in the form:
+I will provide:
+- A product’s name
+- A short description
+- A detailed description (in Markdown/HTML)
+- A list of categories.
+
+Your task is to:
+1. Understand the key product attributes, especially if it is RVP or LVT, and incorporate their unique features where applicable:
+   - **RVP (Rigid Vinyl Plank)**: Mention it has a rigid SPC core (Stone Polymer Composite) for dimensional stability, ultra-strong rigid construction for flat installation, and built-in acoustic underlay with sound absorption (e.g., 19db impact reduction). Highlight its fast deployment if the foundation is perfectly level.
+   - **LVT (Luxury Vinyl Tile)**: Emphasize it is multi-layered vinyl that replicates wood or stone, offering a durable, low-maintenance, and visually appealing solution.
+
+2. Create an SEO-friendly meta title (up to 60 characters) that:
+   - Clearly identifies the product type (e.g., RVP or LVT).
+   - Highlights unique benefits or specifications.
+   - Is concise and compelling.
+
+3. Generate a meta description (up to 160 characters) that:
+   - Clearly explains the product and its use cases.
+   - Accurately summarizes its unique features and benefits.
+   - Follows Google's best practices (natural language, no keyword stuffing, relevant and helpful to users).
+
+4. Output your response as **valid JSON**, formatted like this:
 
 {
   "meta_title": "Your meta title here",
   "meta_description": "Your meta description here"
 }
 
-Important notes:
+Important:
+- Use natural, human-readable language in both fields.
 - Do not include anything except the JSON object in your response.
-- Make sure the JSON is properly escaped and valid.
+- The JSON must be valid and properly escaped.
 
 Here is the product information:
 
@@ -259,7 +271,7 @@ func UpdateSEO(conf *Config) error {
 		const maxDescriptionLength = 160
 
 		var metaTitle, metaDescription string
-		retries := 5
+		retries := 10
 
 		// Retry loop for generating valid meta title and description
 		for i := 0; i < retries; i++ {
@@ -289,13 +301,13 @@ func UpdateSEO(conf *Config) error {
 		for {
 			fmt.Println("Do you approve these values? (y/n): ")
 			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input) // Remove whitespace and newline characters
+			input = strings.TrimSpace(input)
 
 			if input == "y" {
-				break // Proceed to the next product
+				break
 			} else if input == "n" {
 				fmt.Println("Skipping this product...")
-				continue // Skip the update for this product
+				continue
 			} else {
 				fmt.Println("Invalid input. Please enter 'y' for yes or 'n' for no.")
 			}
@@ -303,10 +315,14 @@ func UpdateSEO(conf *Config) error {
 
 		// Update the product's Yoast SEO fields
 		updatePayload := map[string]interface{}{
-			"meta_data": []map[string]interface{}{
+			"meta_data": []map[string]string{
 				{
-					"key":   "yoast_head_json",
-					"value": map[string]string{"title": metaTitle, "og_description": metaDescription},
+					"key":   "_yoast_wpseo_title",
+					"value": metaTitle,
+				},
+				{
+					"key":   "_yoast_wpseo_metadesc",
+					"value": metaDescription,
 				},
 			},
 		}
