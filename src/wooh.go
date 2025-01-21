@@ -1,7 +1,6 @@
 package wooh
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -374,6 +373,7 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 
 	trackerFile := "seo-update-tracker.json"
 	var tracker *seoUpdateTracker
+	fmt.Println("Starting SEO update...: ", restartTracking)
 	if restartTracking {
 		// Clear old data
 		tracker = &seoUpdateTracker{UpdatedIDs: make(map[int]bool)}
@@ -395,7 +395,7 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 	}
 	fmt.Printf("Products To Be Processed: %d\n", len(products))
 
-	reader := bufio.NewReader(os.Stdin)
+	// reader := bufio.NewReader(os.Stdin)
 
 	for _, product := range products {
 		rawID := product["id"]
@@ -405,13 +405,12 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 			continue
 		}
 
-		// Convert float64 -> int for the actual product ID
 		productID := int(idFloat)
-
-		// Skip if this ID is already updated in the tracker
 		if tracker.UpdatedIDs[productID] {
 			log.Printf("Skipping product ID %v (already updated)\n", productID)
 			continue
+		} else {
+			log.Printf("Processing product ID %v\n", productID)
 		}
 
 		productName, _ := product["name"].(string)

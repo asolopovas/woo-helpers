@@ -69,7 +69,7 @@ func newRootCmd() *cobra.Command {
 			}
 
 			if autofill {
-				UpdateSEO(conf, autofill)
+				UpdateSEO(conf, resetAutoFill)
 			}
 
 		}}
