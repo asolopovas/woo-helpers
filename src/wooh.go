@@ -96,13 +96,11 @@ func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]W
 
 		allProducts = append(allProducts, products...)
 		if len(products) < perPage {
-			// no more pages
 			break
 		}
 		page++
 	}
 
-	// Save typed data to your cache for next time
 	pc.SaveToCache(cacheFile, allProducts)
 	return allProducts, nil
 }
@@ -119,7 +117,6 @@ func ListProductMeta(conf *Config) {
 		fmt.Printf("ID: %v\n", product.ID)
 		fmt.Printf("Name: %v\n", product.Name)
 
-		// Extract and print specific metadata values
 		for _, meta := range product.MetaData {
 			switch meta.Key {
 			case "_yoast_wpseo_title":
