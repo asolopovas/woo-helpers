@@ -15,10 +15,15 @@ import (
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"github.com/go-resty/resty/v2"
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/sashabaranov/go-openai/jsonschema"
 )
 
 type Category struct {
 	ID string `yaml:"id"`
+}
+type JSONResponse struct {
+	MetaTitle       string `json:"meta_title"`
+	MetaDescription string `json:"meta_description"`
 }
 type ProductMeta struct {
 	Name             *string
@@ -138,13 +143,13 @@ func ListProductMeta(conf *Config) {
 // -------------------------------------------------------------------
 // OpenAI logic (unchanged)
 // -------------------------------------------------------------------
-func OpenAIProcess(conf *Config, productName, shortDescription, description string, categories []WooCategory) (string, string, error) {
-	client := openai.NewClient(conf.OpenAIKey)
-	prompt := fmt.Sprintf(`
+
+func OpenAiGenPrompt(productName string, shortDescription string, description string, categories []WooCategory) string {
+	return fmt.Sprintf(`
 You are an experienced SEO specialist and copywriter with expertise in flooring materials like RVP (Rigid Vinyl Plank) and LVT (Luxury Vinyl Tile).
 
 I will provide:
-- A product’s name
+- A product's name
 - A short description
 - A detailed description (in Markdown/HTML)
 - A list of categories.
@@ -190,15 +195,32 @@ Here is the product information:
 - Categories: %v
 `, productName, shortDescription, description, categories)
 
-	// Create the chat completion request
+}
+func OpenAIProcess(conf *Config, prompt string) (string, string, error) {
+	client := openai.NewClient(conf.OpenAIKey)
+
+	var responseStruct JSONResponse
+
+	schema, err := jsonschema.GenerateSchemaForType(responseStruct)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate JSON schema: %w", err)
+	}
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4o,
+			Model: openai.GPT3Dot5Turbo1106,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
 					Content: prompt,
+				},
+			},
+			ResponseFormat: &openai.ChatCompletionResponseFormat{
+				Type: openai.ChatCompletionResponseFormatTypeJSONSchema,
+				JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
+					Name:   "metadata_generation",
+					Schema: schema,
+					Strict: true,
 				},
 			},
 			Temperature: 0.7,
@@ -313,7 +335,8 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		retries := 10
 
 		for i := 0; i < retries; i++ {
-			metaTitle, metaDescription, err = OpenAIProcess(conf, productName, shortDescription, cleanedDescription, categories)
+			prompt := OpenAiGenPrompt(productName, shortDescription, cleanedDescription, categories)
+			metaTitle, metaDescription, err = OpenAIProcess(conf, prompt)
 			if err != nil {
 				log.Printf("Error generating meta fields for product ID %v: %v", productID, err)
 				continue
