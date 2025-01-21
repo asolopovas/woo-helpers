@@ -28,6 +28,38 @@ type ProductCache struct {
 	mu         sync.Mutex               // to guard concurrent access (if needed)
 }
 
+type SeoUpdateTracker struct {
+	UpdatedIDs map[int]bool `json:"updated_ids"`
+	mu         sync.Mutex
+}
+
+func LoadSEOUpdateTracker(filename string) (*SeoUpdateTracker, error) {
+	t := &SeoUpdateTracker{UpdatedIDs: make(map[int]bool)}
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return t, nil
+		}
+		return nil, err
+	}
+	if err := json.Unmarshal(data, t); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// Update Tracker
+func (t *SeoUpdateTracker) save(filename string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	data, err := json.Marshal(t)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, data, 0644)
+}
+
 func (pc *ProductCache) FetchFromCache(cacheFile string, maxAge time.Duration) ([]map[string]interface{}, error) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()

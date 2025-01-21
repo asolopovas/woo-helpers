@@ -74,15 +74,19 @@ func newRootCmd() *cobra.Command {
 				UpdateSEO(conf, resetAutoFill, prompt)
 			}
 
+			if listProductMeta {
+				ListProductMeta(conf)
+			}
+
 		}}
 
-	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Get Version")
-	rootCmd.Flags().StringVarP(&configPath, "config", "c", "wooh.yaml", "Custom config path")
-	rootCmd.Flags().StringVarP(&imagesPath, "images-path", "p", ".", "Images Path")
 	rootCmd.Flags().BoolVarP(&autofill, "autofill", "a", false, "Yoast SEO Meta Data Autofill")
-	rootCmd.Flags().BoolVarP(&resetAutoFill, "resetAutofill", "r", false, "Reset Yoast Cache and Products Data")
-	rootCmd.Flags().BoolVarP(&prompt, "prompt", "p", false, "Prompt for confirmation for each product")
+	rootCmd.Flags().StringVarP(&configPath, "config", "c", "wooh.yaml", "Custom config path")
+	rootCmd.Flags().StringVarP(&imagesPath, "images-path", "i", ".", "Images Path")
 	rootCmd.Flags().BoolVarP(&listProductMeta, "listProductMeta", "l", false, "List Product Meta")
+	rootCmd.Flags().BoolVarP(&prompt, "prompt", "p", false, "Prompt for confirmation for each product")
+	rootCmd.Flags().BoolVarP(&resetAutoFill, "resetAutofill", "r", false, "Reset Yoast Cache and Products Data")
+	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Get Version")
 
 	rootCmd.AddCommand(newCompletionCmd())
 

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
@@ -84,6 +83,17 @@ func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]m
 	// Save to cache for next run
 	pc.SaveToCache(cacheFile, allProducts)
 	return allProducts, nil
+}
+
+func ListProductMeta(conf *Config) {
+	products, err := GetProducts(conf, "./output/products-cache.json", 24*time.Hour)
+	if err != nil {
+		log.Fatalf("Error fetching products: %v", err)
+	}
+
+	for _, product := range products {
+		fmt.Println(product["name"])
+	}
 }
 
 // -------------------------------------------------------------------
@@ -189,64 +199,18 @@ Here is the product information:
 // Helper to convert HTML to Markdown (unchanged)
 // -------------------------------------------------------------------
 func cleanHTMLToMarkdown(html string) (string, error) {
-	// Convert HTML to Markdown
 	markdown, err := htmltomarkdown.ConvertString(html)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// Replace #### with ## for better readability
 	markdown = strings.ReplaceAll(markdown, "####", "##")
-
-	// Remove all images in the form ![](url)
-	// Regex pattern to match images in Markdown
 	imageRegex := regexp.MustCompile(`!\[.*?\]\(.*?\)`)
 	markdown = imageRegex.ReplaceAllString(markdown, "")
-
-	// Ensure there's a maximum of one newline between lines
-	// Replace multiple newlines (\n) with a single newline
 	newlineRegex := regexp.MustCompile(`\n{2,}`)
 	markdown = newlineRegex.ReplaceAllString(markdown, "\n")
-
-	// Trim any leading or trailing whitespace or newlines
 	markdown = strings.TrimSpace(markdown)
 
 	return markdown, nil
-}
-
-// -------------------------------------------------------------------
-// SEO update tracker struct + helpers
-// -------------------------------------------------------------------
-type seoUpdateTracker struct {
-	UpdatedIDs map[int]bool `json:"updated_ids"`
-	mu         sync.Mutex
-}
-
-func loadSEOUpdateTracker(filename string) (*seoUpdateTracker, error) {
-	t := &seoUpdateTracker{UpdatedIDs: make(map[int]bool)}
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// no file yet, return empty
-			return t, nil
-		}
-		return nil, err
-	}
-	if err := json.Unmarshal(data, t); err != nil {
-		return nil, err
-	}
-	return t, nil
-}
-
-func (t *seoUpdateTracker) save(filename string) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	data, err := json.Marshal(t)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filename, data, 0644)
 }
 
 // -------------------------------------------------------------------
@@ -255,16 +219,14 @@ func (t *seoUpdateTracker) save(filename string) error {
 func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	client := resty.New()
 
-	trackerFile := "seo-update-tracker.json"
-	var tracker *seoUpdateTracker
+	trackerFile := "./output/seo-update-tracker.json"
+	var tracker *SeoUpdateTracker
 	fmt.Println("Starting SEO update...: ", restartTracking)
 	if restartTracking {
-		// Clear old data
-		tracker = &seoUpdateTracker{UpdatedIDs: make(map[int]bool)}
+		tracker = &SeoUpdateTracker{UpdatedIDs: make(map[int]bool)}
 	} else {
-		// Load existing file if any
 		var err error
-		tracker, err = loadSEOUpdateTracker(trackerFile)
+		tracker, err = LoadSEOUpdateTracker(trackerFile)
 		if err != nil {
 			return fmt.Errorf("failed to load SEO update tracker: %w", err)
 		}
