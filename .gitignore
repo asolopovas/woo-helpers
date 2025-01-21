@@ -7,3 +7,7 @@ images/**
 !images/sample.jpg
 products-cache.json
 seo-update-tracker.json
+input/**
+!input/.gitkeep
+output/**
+!output/.gitkeep
