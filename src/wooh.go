@@ -108,7 +108,8 @@ func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]W
 }
 
 func ListProductMeta(conf *Config) {
-	products, err := GetProducts(conf, "./output/products-cache.json", 24*time.Hour)
+	productCachePath := "./output/products-cache.json"
+	products, err := GetProducts(conf, productCachePath, 24*time.Hour)
 	if err != nil {
 		log.Fatalf("Error fetching products: %v", err)
 	}
@@ -254,13 +255,13 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	client := resty.New()
 
 	trackerFile := "./output/seo-update-tracker.json"
-	var tracker *SeoUpdateTracker
+	var tracker *TrackerUpdate
 	fmt.Println("Starting SEO update...: ", restartTracking)
 	if restartTracking {
-		tracker = &SeoUpdateTracker{UpdatedIDs: make(map[int]bool)}
+		tracker = &TrackerUpdate{UpdatedIDs: make(map[int]bool)}
 	} else {
 		var err error
-		tracker, err = LoadSEOUpdateTracker(trackerFile)
+		tracker, err = TrackerLoad(trackerFile)
 		if err != nil {
 			return fmt.Errorf("failed to load SEO update tracker: %w", err)
 		}

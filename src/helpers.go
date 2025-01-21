@@ -19,6 +19,8 @@ type Config struct {
 	WpKey             string      `yaml:"wp_key"`
 	WooConsumerKey    string      `yaml:"consumer_key"`
 	WooConsumerSecret string      `yaml:"consumer_secret"`
+	ProductCachePath  string      `yaml:"product_cache_path"`
+	TrackerPath       string      `yaml:"tracker_path"`
 	ProductMeta       ProductMeta `yaml:"product_meta"`
 }
 
@@ -28,13 +30,13 @@ type ProductCache struct {
 	mu         sync.Mutex               // to guard concurrent access (if needed)
 }
 
-type SeoUpdateTracker struct {
+type TrackerUpdate struct {
 	UpdatedIDs map[int]bool `json:"updated_ids"`
 	mu         sync.Mutex
 }
 
-func LoadSEOUpdateTracker(filename string) (*SeoUpdateTracker, error) {
-	t := &SeoUpdateTracker{UpdatedIDs: make(map[int]bool)}
+func TrackerLoad(filename string) (*TrackerUpdate, error) {
+	t := &TrackerUpdate{UpdatedIDs: make(map[int]bool)}
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -49,7 +51,7 @@ func LoadSEOUpdateTracker(filename string) (*SeoUpdateTracker, error) {
 }
 
 // Update Tracker
-func (t *SeoUpdateTracker) save(filename string) error {
+func (t *TrackerUpdate) save(filename string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
