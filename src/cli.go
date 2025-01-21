@@ -73,6 +73,7 @@ func newRootCmd() *cobra.Command {
 			if autofill {
 				UpdateSEO(conf, resetAutoFill, prompt)
 			}
+			fmt.Println(listProductMeta)
 
 			if listProductMeta {
 				ListProductMeta(conf)

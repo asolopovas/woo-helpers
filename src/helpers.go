@@ -79,11 +79,24 @@ func (pc *ProductCache) FetchFromCache(cacheFile string, maxAge time.Duration) (
 	}
 	return nil, nil
 }
-func (pc *ProductCache) SaveToCache(cacheFile string, products []map[string]interface{}) {
+func (pc *ProductCache) SaveToCache(cacheFile string, products []WooProduct) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 
-	pc.Products = products
+	var productMaps []map[string]interface{}
+	for _, p := range products {
+		productMap := map[string]interface{}{
+			"id":                p.ID,
+			"name":              p.Name,
+			"description":       p.Description,
+			"short_description": p.ShortDescription,
+			"categories":        p.Categories,
+			"meta_data":         p.MetaData,
+		}
+		productMaps = append(productMaps, productMap)
+	}
+
+	pc.Products = productMaps
 	pc.LastUpdate = time.Now()
 
 	data, err := json.Marshal(pc)

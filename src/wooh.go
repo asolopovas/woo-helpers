@@ -29,26 +29,58 @@ type ProductMeta struct {
 	Categories       []interface{} `yaml:"categories"`
 }
 
+type WooProduct struct {
+	ID               int64         `json:"id"`
+	Name             string        `json:"name"`
+	Description      string        `json:"description"`
+	ShortDescription string        `json:"short_description"`
+	Categories       []WooCategory `json:"categories"`
+	MetaData         []WooMetaData `json:"meta_data"`
+}
+type WooCategory struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+type WooMetaData struct {
+	ID    int64       `json:"id"`
+	Key   string      `json:"key"`
+	Value interface{} `json:"value"`
+}
+
 // -------------------------------------------------------------------
 // Fetch WooCommerce products, with cache
 // -------------------------------------------------------------------
-func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]map[string]interface{}, error) {
+func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]WooProduct, error) {
 	var pc ProductCache
 
 	// Try fetching from cache
-	if cached, err := pc.FetchFromCache(cacheFile, maxCacheAge); err != nil {
-		log.Printf("Cache read error: %v", err)
-	} else if cached != nil {
-		return cached, nil
+	if cachedData, err := pc.FetchFromCache(cacheFile, maxCacheAge); err == nil && cachedData != nil {
+		// If your cached data is still []map[string]interface{},
+		// you could either:
+		// 1) Convert it here, OR
+		// 2) Store typed data in your cache from the start
+		// For simplicity, let's assume we store typed data from the start.
+
+		// Convert from []map[string]interface{} to []byte
+		// so we can unmarshal again (if needed).
+		jsonBytes, err := json.Marshal(cachedData)
+		if err == nil {
+			var cachedProducts []WooProduct
+			err = json.Unmarshal(jsonBytes, &cachedProducts)
+			if err == nil {
+				return cachedProducts, nil
+			}
+		}
 	}
 
 	// Cache is stale or missing, so fetch all pages from WooCommerce
 	log.Println("Fetching all products from API (paginated)...")
-
 	client := resty.New()
-	allProducts := make([]map[string]interface{}, 0)
-	page, perPage := 1, 100
+	allProducts := make([]WooProduct, 0)
 
+	page, perPage := 1, 100
 	for {
 		resp, err := client.R().
 			SetHeader("Accept", "application/json").
@@ -67,7 +99,7 @@ func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]m
 			return nil, fmt.Errorf("error fetching page %d: %s, %s", page, resp.Status(), resp.String())
 		}
 
-		var products []map[string]interface{}
+		var products []WooProduct
 		if err := json.Unmarshal(resp.Body(), &products); err != nil {
 			return nil, fmt.Errorf("failed to parse products on page %d: %w", page, err)
 		}
@@ -80,7 +112,7 @@ func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]m
 		page++
 	}
 
-	// Save to cache for next run
+	// Save typed data to your cache for next time
 	pc.SaveToCache(cacheFile, allProducts)
 	return allProducts, nil
 }
@@ -90,16 +122,39 @@ func ListProductMeta(conf *Config) {
 	if err != nil {
 		log.Fatalf("Error fetching products: %v", err)
 	}
+	log.Printf("Fetched %d products\n", len(products))
 
 	for _, product := range products {
-		fmt.Println(product["name"])
+		fmt.Printf("ID: %v\n", product.ID)
+		fmt.Printf("Name: %v\n", product.Name)
+
+		// Look for meta_data entry with key == "yoast_head_json"
+		var yoastHead map[string]interface{} // The "value" can be a map with "og_title", "og_description", etc.
+		for _, md := range product.MetaData {
+			if md.Key == "yoast_head_json" {
+				// If "value" is the actual JSON object, parse or cast it to a map
+				if val, ok := md.Value.(map[string]interface{}); ok {
+					yoastHead = val
+				}
+				break
+			}
+		}
+
+		if yoastHead != nil {
+			ogTitle, _ := yoastHead["og_title"].(string)
+			ogDescription, _ := yoastHead["og_description"].(string)
+			fmt.Printf("SEO Title: %s\n", ogTitle)
+			fmt.Printf("SEO Description: %s\n", ogDescription)
+		} else {
+			fmt.Println("No yoast_head_json found for this product.")
+		}
 	}
 }
 
 // -------------------------------------------------------------------
 // OpenAI logic (unchanged)
 // -------------------------------------------------------------------
-func OpenAIProcess(conf *Config, productName, shortDescription, description string, categories []interface{}) (string, string, error) {
+func OpenAIProcess(conf *Config, productName, shortDescription, description string, categories []WooCategory) (string, string, error) {
 	client := openai.NewClient(conf.OpenAIKey)
 	prompt := fmt.Sprintf(`
 You are an experienced SEO specialist and copywriter with expertise in flooring materials like RVP (Rigid Vinyl Plank) and LVT (Luxury Vinyl Tile).
@@ -233,7 +288,7 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	}
 
 	// Get products
-	cacheFile := "products-cache.json"
+	cacheFile := "./output/products-cache.json"
 	maxCacheAge := 24 * time.Hour
 	products, err := GetProducts(conf, cacheFile, maxCacheAge)
 	if err != nil {
@@ -243,25 +298,19 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	reader := bufio.NewReader(os.Stdin)
 
 	for _, product := range products {
-		rawID := product["id"]
-		idFloat, ok := rawID.(float64)
-		if !ok {
-			log.Printf("Skipping product with invalid ID type: %v\n", rawID)
-			continue
-		}
+		rawID := product.ID
+		productID := int(rawID)
 
-		productID := int(idFloat)
 		if tracker.UpdatedIDs[productID] {
 			log.Printf("Skipping product ID %v (already updated)\n", productID)
 			continue
-		} else {
-			log.Printf("Processing product ID %v\n", productID)
 		}
+		log.Printf("Processing product ID %v\n", productID)
 
-		productName, _ := product["name"].(string)
-		shortDescription, _ := product["short_description"].(string)
-		description, _ := product["description"].(string)
-		categories, _ := product["categories"].([]interface{})
+		productName := product.Name
+		shortDescription := product.ShortDescription
+		description := product.Description
+		categories := product.Categories
 
 		cleanedDescription, err := cleanHTMLToMarkdown(description)
 		if err != nil {
@@ -362,7 +411,6 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 
 	return nil
 }
-
 func UploadImageToWordPress(conf *Config, imageDirPath string) error {
 	client := resty.New()
 
