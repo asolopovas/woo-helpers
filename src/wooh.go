@@ -55,6 +55,7 @@ func GetProducts(conf *Config, maxCacheAge time.Duration) ([]WooProduct, error) 
 	dir, err := os.Getwd()
 	ErrChk(err)
 	productCacheFilePath := filepath.Join(dir, ".wooh-output", conf.ProductCachePath)
+	fmt.Println(productCacheFilePath)
 
 	if cachedData, err := pc.FetchFromCache(productCacheFilePath, maxCacheAge); err == nil && cachedData != nil {
 		jsonBytes, err := json.Marshal(cachedData)

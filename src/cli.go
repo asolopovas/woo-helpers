@@ -66,14 +66,12 @@ func newRootCmd() *cobra.Command {
 			}
 
 			if configPath != "" && PathExist(imagesPath) {
-				fmt.Println(imagesPath)
 				UploadImageToWordPress(conf, imagesPath)
 			}
 
 			if autofill {
 				UpdateSEO(conf, resetAutoFill, prompt)
 			}
-			fmt.Println(listProductMeta)
 
 			if listProductMeta {
 				ListProductMeta(conf)
