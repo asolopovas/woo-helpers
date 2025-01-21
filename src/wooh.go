@@ -194,7 +194,7 @@ Here is the product information:
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4oLatest,
+			Model: openai.GPT4o,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
@@ -265,8 +265,9 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	trackerFilepath := filepath.Join(cacheDir, conf.TrackerFilename)
 
 	var tracker *TrackerUpdate
-	fmt.Println("Starting SEO update...: ", restartTracking)
+	fmt.Println("Starting SEO update...")
 	if restartTracking {
+		fmt.Println("Starting Fresh Tracker...")
 		tracker = &TrackerUpdate{UpdatedIDs: make(map[int]bool)}
 	} else {
 		var err error

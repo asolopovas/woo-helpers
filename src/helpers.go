@@ -34,9 +34,9 @@ type TrackerUpdate struct {
 	mu         sync.Mutex
 }
 
-func TrackerLoad(filename string) (*TrackerUpdate, error) {
+func TrackerLoad(filePath string) (*TrackerUpdate, error) {
 	t := &TrackerUpdate{UpdatedIDs: make(map[int]bool)}
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return t, nil
