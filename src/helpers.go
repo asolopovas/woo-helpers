@@ -48,21 +48,13 @@ func TrackerLoad(filename string) (*TrackerUpdate, error) {
 	}
 	return t, nil
 }
-func (t *TrackerUpdate) save(trackerFileName string) error {
+func (t *TrackerUpdate) save(trackerFilepath string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	pwd, err := os.Getwd()
-	ErrChk(err)
-	dir := filepath.Join(pwd, ".wooh-output")
-	file_path := filepath.Join(dir, trackerFileName)
-
 	data, err := json.Marshal(t)
 	ErrChk(err)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-	return os.WriteFile(file_path, data, 0644)
+	return os.WriteFile(trackerFilepath, data, 0644)
 }
 func (pc *ProductCache) FetchFromCache(cacheFilePath string, maxAge time.Duration) ([]map[string]interface{}, error) {
 	pc.mu.Lock()

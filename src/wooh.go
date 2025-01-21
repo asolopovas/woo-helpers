@@ -255,6 +255,14 @@ func cleanHTMLToMarkdown(html string) (string, error) {
 // -------------------------------------------------------------------
 func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	client := resty.New()
+	dir, err := os.Getwd()
+	ErrChk(err)
+	cacheDir := filepath.Join(dir, ".wooh-output")
+	if PathExist(cacheDir) == false {
+		err := os.Mkdir(cacheDir, 0755)
+		ErrChk(err)
+	}
+	trackerFilepath := filepath.Join(cacheDir, conf.TrackerFilename)
 
 	var tracker *TrackerUpdate
 	fmt.Println("Starting SEO update...: ", restartTracking)
@@ -262,7 +270,8 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		tracker = &TrackerUpdate{UpdatedIDs: make(map[int]bool)}
 	} else {
 		var err error
-		tracker, err = TrackerLoad(conf.TrackerFilename)
+
+		tracker, err = TrackerLoad(trackerFilepath)
 		if err != nil {
 			return fmt.Errorf("failed to load SEO update tracker: %w", err)
 		}
@@ -381,7 +390,7 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		log.Printf("Successfully updated SEO for product ID %v", productID)
 
 		tracker.UpdatedIDs[productID] = true
-		if err := tracker.save(conf.TrackerFilename); err != nil {
+		if err := tracker.save(trackerFilepath); err != nil {
 			log.Printf("Warning: could not save SEO tracker file: %v", err)
 		}
 	}
