@@ -1,6 +1,8 @@
 package wooh
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,8 +13,8 @@ import (
 
 	// imported as openai
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
-
-	"github.com/go-resty/resty/v2"
+	"github.com/go-resty/resty/v2"             // imported as openai
+	openai "github.com/sashabaranov/go-openai" // For OpenAI usage
 	"gopkg.in/yaml.v3"
 )
 
@@ -153,102 +155,183 @@ func GetProducts(conf *Config) ([]map[string]interface{}, error) {
 }
 
 func OpenAIProcess(conf *Config, productName, shortDescription, description string, categories []interface{}) (string, string, error) {
-	// client := openai.NewClient(
-	// 	option.WithAPIKey(conf.OpenAIKey),
-	// )
+	client := openai.NewClient(conf.OpenAIKey)
+	prompt := fmt.Sprintf(`
+You are an experienced SEO specialist.
+I will provide a product’s name, a short description, a detailed description (in Markdown/HTML),
+and a list of categories.
 
-	// Prepare prompt for OpenAI
-	// 	prompt := fmt.Sprintf(`Generate a meta title and meta description for a product with the following details:
-	// - Product Name: %s
-	// - Short Description: %s
-	// - Description: %s
-	// - Categories: %v
+Your task:
+1. Read and understand the product information.
+2. Generate a concise and informative meta title (up to 60 characters).
+3. Generate a meta description (up to 160 characters) that follows Google's best practices:
+   - Accurately summarize the product.
+   - Use natural, human-readable language.
+   - Avoid keyword stuffing; keep it relevant and helpful.
+   - Include key specs only if they add real value.
+4. Format your response strictly as valid JSON in the form:
 
-	// Respond with a JSON object containing "meta_title" and "meta_description".`, productName, shortDescription, description, categories)
+{
+  "meta_title": "Your meta title here",
+  "meta_description": "Your meta description here"
+}
 
-	// chatCompletion, err := client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
-	// 	Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
-	// 		openai.UserMessage(prompt),
-	// 	}),
-	// 	Model: openai.F(openai.ChatModelGPT4o),
-	// })
-	// if err != nil {
-	// 	return "", "", fmt.Errorf("failed to process OpenAI API: %w", err)
-	// }
+Important notes:
+- Do not include anything except the JSON object in your response.
+- Make sure the JSON is properly escaped and valid.
 
-	// var response map[string]string
-	// if err := json.Unmarshal([]byte(chatCompletion.Choices[0].Message.Content), &response); err != nil {
-	// 	return "", "", fmt.Errorf("failed to parse OpenAI response: %w", err)
-	// }
+Here is the product information:
 
-	// return response["meta_title"], response["meta_description"], nil
+- Product Name: %s
+- Short Description: %s
+- Full Description (may include Markdown/HTML): %s
+- Categories: %v
+`, productName, shortDescription, description, categories)
 
-	fmt.Println(productName, shortDescription, description, categories)
-	return "", "", nil
+	// Create the chat completion request
+	resp, err := client.CreateChatCompletion(
+		context.Background(),
+		openai.ChatCompletionRequest{
+			Model: openai.GPT3Dot5Turbo,
+			Messages: []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: prompt,
+				},
+			},
+			Temperature: 0.7,
+		},
+	)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get chat completion: %w", err)
+	}
 
+	if len(resp.Choices) == 0 {
+		return "", "", fmt.Errorf("no choices returned by OpenAI API")
+	}
+
+	// The model's reply should be valid JSON with "meta_title" and "meta_description"
+	content := resp.Choices[0].Message.Content
+
+	// Parse the JSON response
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		return "", "", fmt.Errorf("failed to parse JSON: %w; raw content: %s", err, content)
+	}
+
+	metaTitle, ok := parsed["meta_title"]
+	if !ok {
+		return "", "", fmt.Errorf(`JSON response did not include "meta_title"`)
+	}
+
+	metaDescription, ok := parsed["meta_description"]
+	if !ok {
+		return "", "", fmt.Errorf(`JSON response did not include "meta_description"`)
+	}
+
+	return metaTitle, metaDescription, nil
 }
 
 // updateSEO updates the Yoast SEO meta fields for all WooCommerce products.
 func UpdateSEO(conf *Config) error {
-	// client := resty.New()
+	client := resty.New()
 
 	products, err := GetProducts(conf)
 	if err != nil {
 		return fmt.Errorf("failed to fetch products: %w", err)
 	}
+	reader := bufio.NewReader(os.Stdin) // For user input
 
 	for _, product := range products {
 		productID := product["id"]
-		// productName, _ := product["name"].(string)
-		// shortDescription, _ := product["short_description"].(string)
+		productName, _ := product["name"].(string)
+		shortDescription, _ := product["short_description"].(string)
 		description, _ := product["description"].(string)
-		// categories, _ := product["categories"].([]interface{})
+		categories, _ := product["categories"].([]interface{})
 
 		cleanedDescription, err := cleanHTMLToMarkdown(description)
 		if err != nil {
 			return fmt.Errorf("failed to clean description for product ID %v: %w", productID, err)
 		}
-		fmt.Println(cleanedDescription)
-		fmt.Println("-------------------------")
 
-		// metaTitle, metaDescription, err := OpenAIProcess(conf, productName, shortDescription, cleanedDescription, categories)
-		// if err != nil {
-		// 	return fmt.Errorf("failed to process OpenAI for product ID %v: %w", productID, err)
-		// }
+		// Constants for character limits
+		const maxTitleLength = 60
+		const maxDescriptionLength = 160
 
-		// fmt.Println(metaTitle, metaDescription)
+		var metaTitle, metaDescription string
+		retries := 5
+
+		// Retry loop for generating valid meta title and description
+		for i := 0; i < retries; i++ {
+			metaTitle, metaDescription, err = OpenAIProcess(conf, productName, shortDescription, cleanedDescription, categories)
+			if err != nil {
+				log.Printf("Error generating meta fields for product ID %v: %v", productID, err)
+				continue
+			}
+
+			// Validate the length of the meta fields
+			if len(metaTitle) <= maxTitleLength && len(metaDescription) <= maxDescriptionLength {
+				break // Valid meta fields
+			} else {
+				log.Printf("Meta fields exceeded character limits for product ID %v (attempt %d/%d)", productID, i+1, retries)
+			}
+		}
+
+		// Check if valid meta fields were generated after retries
+		if len(metaTitle) > maxTitleLength || len(metaDescription) > maxDescriptionLength {
+			log.Printf("Failed to generate valid meta fields for product ID %v after %d retries", productID, retries)
+			continue
+		}
+
+		fmt.Println("Meta Title: " + metaTitle)
+		fmt.Println("Meta Description: " + metaDescription)
+
+		for {
+			fmt.Println("Do you approve these values? (y/n): ")
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input) // Remove whitespace and newline characters
+
+			if input == "y" {
+				break // Proceed to the next product
+			} else if input == "n" {
+				fmt.Println("Skipping this product...")
+				continue // Skip the update for this product
+			} else {
+				fmt.Println("Invalid input. Please enter 'y' for yes or 'n' for no.")
+			}
+		}
 
 		// Update the product's Yoast SEO fields
-		// updatePayload := map[string]interface{}{
-		// 	"meta_data": []map[string]interface{}{
-		// 		{
-		// 			"key":   "yoast_head_json",
-		// 			"value": map[string]string{"title": metaTitle, "og_description": metaDescription},
-		// 		},
-		// 	},
-		// }
+		updatePayload := map[string]interface{}{
+			"meta_data": []map[string]interface{}{
+				{
+					"key":   "yoast_head_json",
+					"value": map[string]string{"title": metaTitle, "og_description": metaDescription},
+				},
+			},
+		}
 
-		// productEndpoint := fmt.Sprintf(
-		// 	"https://%s/wp-json/wc/v3/products/%v?consumer_key=%s&consumer_secret=%s",
-		// 	conf.Site, productID, conf.WooConsumerKey, conf.WooConsumerSecret,
-		// )
+		productEndpoint := fmt.Sprintf(
+			"https://%s/wp-json/wc/v3/products/%v?consumer_key=%s&consumer_secret=%s",
+			conf.Site, productID, conf.WooConsumerKey, conf.WooConsumerSecret,
+		)
 
-		// resp, err := client.R().
-		// 	SetHeader("Content-Type", "application/json").
-		// 	SetBody(updatePayload).
-		// 	Put(productEndpoint)
+		resp, err := client.R().
+			SetHeader("Content-Type", "application/json").
+			SetBody(updatePayload).
+			Put(productEndpoint)
 
-		// if err != nil {
-		// 	log.Printf("Failed to update SEO for product ID %v: %v", productID, err)
-		// 	continue
-		// }
+		if err != nil {
+			log.Printf("Failed to update SEO for product ID %v: %v", productID, err)
+			continue
+		}
 
-		// if resp.IsError() {
-		// 	log.Printf("API error updating SEO for product ID %v: %s", productID, resp.String())
-		// 	continue
-		// }
+		if resp.IsError() {
+			log.Printf("API error updating SEO for product ID %v: %s", productID, resp.String())
+			continue
+		}
 
-		// log.Printf("Successfully updated SEO for product ID %v", productID)
+		log.Printf("Successfully updated SEO for product ID %v", productID)
 	}
 
 	return nil
