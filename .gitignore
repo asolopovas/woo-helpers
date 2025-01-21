@@ -5,3 +5,4 @@ __debug_bin
 images/**
 !images/.gitkeep
 !images/sample.jpg
+products-cache.json

@@ -1,7 +1,6 @@
 package wooh
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	// imported as openai
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
@@ -39,6 +40,57 @@ type ProductMeta struct {
 	Categories       []interface{} `yaml:"categories"`
 }
 
+// -------------------------------------------------------------------
+// Simple file-based cache for products
+// -------------------------------------------------------------------
+type productCache struct {
+	Products   []map[string]interface{} `json:"products"`
+	LastUpdate time.Time                `json:"last_update"`
+	mu         sync.Mutex               // to guard concurrent access (if needed)
+}
+
+// fetchFromCache loads products from cacheFile if still valid.
+func (pc *productCache) fetchFromCache(cacheFile string, maxAge time.Duration) ([]map[string]interface{}, error) {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+
+	data, err := os.ReadFile(cacheFile)
+	if err != nil {
+		// If file doesn't exist, it's not an error; just means no cache
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read cache file: %w", err)
+	}
+	if err := json.Unmarshal(data, pc); err != nil {
+		return nil, fmt.Errorf("failed to parse cache file: %w", err)
+	}
+	// Check cache freshness
+	if time.Since(pc.LastUpdate) <= maxAge {
+		log.Println("Returning products from cache...")
+		return pc.Products, nil
+	}
+	// Cache is stale
+	return nil, nil
+}
+
+// saveToCache writes products to cacheFile with the current timestamp.
+func (pc *productCache) saveToCache(cacheFile string, products []map[string]interface{}) {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+
+	pc.Products = products
+	pc.LastUpdate = time.Now()
+
+	data, err := json.Marshal(pc)
+	if err != nil {
+		log.Printf("Warning: could not marshal cache: %v", err)
+		return
+	}
+	if err := os.WriteFile(cacheFile, data, 0644); err != nil {
+		log.Printf("Warning: could not save cache file: %v", err)
+	}
+}
 func GetConfig(configPath string) (*Config, error) {
 	defaultConfig := &Config{
 		Site:              "domain.com",
@@ -66,31 +118,58 @@ func GetConfig(configPath string) (*Config, error) {
 
 	return readConfig(configPath)
 }
-func GetProducts(conf *Config) ([]map[string]interface{}, error) {
+func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]map[string]interface{}, error) {
+	var pc productCache
+
+	// Try fetching from cache
+	if cached, err := pc.fetchFromCache(cacheFile, maxCacheAge); err != nil {
+		log.Printf("Cache read error: %v", err)
+	} else if cached != nil {
+		return cached, nil
+	}
+
+	// Cache is stale or missing, so fetch all pages from WooCommerce
+	log.Println("Fetching all products from API (paginated)...")
+
 	client := resty.New()
+	allProducts := make([]map[string]interface{}, 0)
+	page, perPage := 1, 100
 
-	productsEndpoint := getProductsEndpoint(conf)
+	for {
+		resp, err := client.R().
+			SetHeader("Accept", "application/json").
+			SetQueryParams(map[string]string{
+				"page":     fmt.Sprintf("%d", page),
+				"per_page": fmt.Sprintf("%d", perPage),
+			}).
+			Get(fmt.Sprintf(
+				"https://%s/wp-json/wc/v3/products?consumer_key=%s&consumer_secret=%s",
+				conf.Site, conf.WooConsumerKey, conf.WooConsumerSecret,
+			))
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch products on page %d: %w", page, err)
+		}
+		if resp.IsError() {
+			return nil, fmt.Errorf("error fetching page %d: %s, %s", page, resp.Status(), resp.String())
+		}
 
-	resp, err := client.R().
-		SetHeader("Accept", "application/json").
-		Get(productsEndpoint)
+		var products []map[string]interface{}
+		if err := json.Unmarshal(resp.Body(), &products); err != nil {
+			return nil, fmt.Errorf("failed to parse products on page %d: %w", page, err)
+		}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch products: %w", err)
+		allProducts = append(allProducts, products...)
+		if len(products) < perPage {
+			// no more pages
+			break
+		}
+		page++
 	}
 
-	if resp.IsError() {
-		return nil, fmt.Errorf("error fetching products: %s, %s", resp.Status(), resp.String())
-	}
-
-	var products []map[string]interface{}
-	if err := json.Unmarshal(resp.Body(), &products); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return products, nil
+	// Save to cache for next run
+	pc.saveToCache(cacheFile, allProducts)
+	return allProducts, nil
 }
-
 func OpenAIProcess(conf *Config, productName, shortDescription, description string, categories []interface{}) (string, string, error) {
 	client := openai.NewClient(conf.OpenAIKey)
 	prompt := fmt.Sprintf(`
@@ -246,11 +325,13 @@ func writeDefaultConfig(configPath string, defaultConfig *Config) error {
 func UpdateSEO(conf *Config) error {
 	client := resty.New()
 
-	products, err := GetProducts(conf)
+	cacheFile := "products-cache.json"
+	maxCacheAge := 24 * time.Hour
+	products, err := GetProducts(conf, cacheFile, maxCacheAge)
 	if err != nil {
 		return fmt.Errorf("failed to fetch products: %w", err)
 	}
-	reader := bufio.NewReader(os.Stdin) // For user input
+	// reader := bufio.NewReader(os.Stdin) // For user input
 
 	for _, product := range products {
 		productID := product["id"]
@@ -296,20 +377,20 @@ func UpdateSEO(conf *Config) error {
 		fmt.Println("Meta Title: " + metaTitle)
 		fmt.Println("Meta Description: " + metaDescription)
 
-		for {
-			fmt.Println("Do you approve these values? (y/n): ")
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input)
+		// for {
+		// 	fmt.Println("Do you approve these values? (y/n): ")
+		// 	input, _ := reader.ReadString('\n')
+		// 	input = strings.TrimSpace(input)
 
-			if input == "y" {
-				break
-			} else if input == "n" {
-				fmt.Println("Skipping this product...")
-				continue
-			} else {
-				fmt.Println("Invalid input. Please enter 'y' for yes or 'n' for no.")
-			}
-		}
+		// 	if input == "y" {
+		// 		break
+		// 	} else if input == "n" {
+		// 		fmt.Println("Skipping this product...")
+		// 		continue
+		// 	} else {
+		// 		fmt.Println("Invalid input. Please enter 'y' for yes or 'n' for no.")
+		// 	}
+		// }
 
 		// Update the product's Yoast SEO fields
 		updatePayload := map[string]interface{}{
