@@ -55,16 +55,7 @@ type WooMetaData struct {
 func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]WooProduct, error) {
 	var pc ProductCache
 
-	// Try fetching from cache
 	if cachedData, err := pc.FetchFromCache(cacheFile, maxCacheAge); err == nil && cachedData != nil {
-		// If your cached data is still []map[string]interface{},
-		// you could either:
-		// 1) Convert it here, OR
-		// 2) Store typed data in your cache from the start
-		// For simplicity, let's assume we store typed data from the start.
-
-		// Convert from []map[string]interface{} to []byte
-		// so we can unmarshal again (if needed).
 		jsonBytes, err := json.Marshal(cachedData)
 		if err == nil {
 			var cachedProducts []WooProduct
@@ -75,7 +66,6 @@ func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]W
 		}
 	}
 
-	// Cache is stale or missing, so fetch all pages from WooCommerce
 	log.Println("Fetching all products from API (paginated)...")
 	client := resty.New()
 	allProducts := make([]WooProduct, 0)
@@ -219,10 +209,8 @@ Here is the product information:
 		return "", "", fmt.Errorf("no choices returned by OpenAI API")
 	}
 
-	// The model's reply should be valid JSON with "meta_title" and "meta_description"
 	content := resp.Choices[0].Message.Content
 
-	// Parse the JSON response
 	var parsed map[string]string
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
 		return "", "", fmt.Errorf("failed to parse JSON: %w; raw content: %s", err, content)
@@ -278,8 +266,7 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		}
 	}
 
-	// Get products
-	cacheFile := "./output/products-cache.json"
+	cacheFile := "./wooh-output/products-cache.json"
 	maxCacheAge := 24 * time.Hour
 	products, err := GetProducts(conf, cacheFile, maxCacheAge)
 	if err != nil {
