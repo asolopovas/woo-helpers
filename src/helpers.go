@@ -23,13 +23,11 @@ type Config struct {
 	TrackerPath       string      `yaml:"tracker_path"`
 	ProductMeta       ProductMeta `yaml:"product_meta"`
 }
-
 type ProductCache struct {
 	Products   []map[string]interface{} `json:"products"`
 	LastUpdate time.Time                `json:"last_update"`
 	mu         sync.Mutex               // to guard concurrent access (if needed)
 }
-
 type TrackerUpdate struct {
 	UpdatedIDs map[int]bool `json:"updated_ids"`
 	mu         sync.Mutex
@@ -49,8 +47,6 @@ func TrackerLoad(filename string) (*TrackerUpdate, error) {
 	}
 	return t, nil
 }
-
-// Update Tracker
 func (t *TrackerUpdate) save(filename string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -61,7 +57,6 @@ func (t *TrackerUpdate) save(filename string) error {
 	}
 	return os.WriteFile(filename, data, 0644)
 }
-
 func (pc *ProductCache) FetchFromCache(cacheFile string, maxAge time.Duration) ([]map[string]interface{}, error) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
@@ -110,13 +105,11 @@ func (pc *ProductCache) SaveToCache(cacheFile string, products []WooProduct) {
 		log.Printf("Warning: could not save cache file: %v", err)
 	}
 }
-
 func ErrChk(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
 }
-
 func PathExist(path string) bool {
 	_, err := os.Stat(path)
 	if err == nil {
@@ -127,7 +120,6 @@ func PathExist(path string) bool {
 	}
 	return true
 }
-
 func Contains(strRange []string, pattern string) bool {
 	for _, val := range strRange {
 		match, _ := regexp.MatchString(pattern, val)
@@ -136,7 +128,6 @@ func Contains(strRange []string, pattern string) bool {
 
 	return false
 }
-
 func Filter(arr []string, cond func(string) bool) []string {
 	result := []string{}
 	for i := range arr {
@@ -146,7 +137,6 @@ func Filter(arr []string, cond func(string) bool) []string {
 	}
 	return result
 }
-
 func GetConfig(configPath string) (*Config, error) {
 	defaultConfig := &Config{
 		Site:              "domain.com",
@@ -174,7 +164,6 @@ func GetConfig(configPath string) (*Config, error) {
 
 	return ReadConfig(configPath)
 }
-
 func ReadConfig(configPath string) (*Config, error) {
 	configFile, err := os.ReadFile(configPath)
 	if err != nil {
@@ -188,7 +177,6 @@ func ReadConfig(configPath string) (*Config, error) {
 
 	return config, nil
 }
-
 func WriteDefaultConfig(configPath string, defaultConfig *Config) error {
 	yamlData, err := yaml.Marshal(defaultConfig)
 	if err != nil {
