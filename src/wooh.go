@@ -1,18 +1,16 @@
 package wooh
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	// imported as openai
+	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
+
 	"github.com/go-resty/resty/v2"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/renderer/html"
 	"gopkg.in/yaml.v3"
 )
 
@@ -68,25 +66,14 @@ type ProductMeta struct {
 }
 
 func cleanHTMLToMarkdown(html string) (string, error) {
-	// Log the HTML input for debugging
-	fmt.Println("HTML Input for Markdown Conversion:", html)
 
-	// Preprocess the HTML to clean up comments and unsupported tags
-	cleanedHTML := preprocessHTML(html)
-
-	// Use the custom Markdown converter
-	markdownConverter := newMarkdownConverter()
-
-	// Use a buffer to capture the Markdown output
-	var buf bytes.Buffer
-	err := markdownConverter.Convert([]byte(cleanedHTML), &buf)
+	markdown, err := htmltomarkdown.ConvertString(html)
 	if err != nil {
-		return "", fmt.Errorf("failed to convert HTML to Markdown: %w", err)
+		log.Fatal(err)
 	}
 
-	return buf.String(), nil
+	return markdown, nil
 }
-
 func getProductsEndpoint(conf *Config) string {
 	return fmt.Sprintf(
 		"https://%s/wp-json/wc/v3/products?consumer_key=%s&consumer_secret=%s",
@@ -94,17 +81,6 @@ func getProductsEndpoint(conf *Config) string {
 	)
 }
 
-func newMarkdownConverter() goldmark.Markdown {
-	return goldmark.New(
-		goldmark.WithParserOptions(
-			parser.WithAutoHeadingID(),
-			parser.WithAttribute(),
-		),
-		goldmark.WithRendererOptions(
-			html.WithUnsafe(), // Alternative for older versions
-		),
-	)
-}
 func readConfig(configPath string) (*Config, error) {
 	configFile, err := os.ReadFile(configPath)
 	if err != nil {
@@ -117,25 +93,6 @@ func readConfig(configPath string) (*Config, error) {
 	}
 
 	return config, nil
-}
-
-func preprocessHTML(html string) string {
-	// Remove WordPress comments like <!-- wp:heading -->
-	html = strings.ReplaceAll(html, "<!-- wp:heading -->", "")
-	html = strings.ReplaceAll(html, "<!-- /wp:heading -->", "")
-	html = strings.ReplaceAll(html, "<!-- wp:paragraph -->", "")
-	html = strings.ReplaceAll(html, "<!-- /wp:paragraph -->", "")
-	html = strings.ReplaceAll(html, "<!-- wp:image -->", "")
-	html = strings.ReplaceAll(html, "<!-- /wp:image -->", "")
-	html = strings.ReplaceAll(html, "<!-- wp:table -->", "")
-	html = strings.ReplaceAll(html, "<!-- /wp:table -->", "")
-
-	// Clean up any remaining WordPress block tags
-	html = strings.ReplaceAll(html, "<!-- wp:generateblocks/container -->", "")
-	html = strings.ReplaceAll(html, "<!-- /wp:generateblocks/container -->", "")
-
-	// Return the cleaned HTML
-	return html
 }
 
 func writeDefaultConfig(configPath string, defaultConfig *Config) error {
