@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sync"
 	"time"
@@ -47,20 +48,26 @@ func TrackerLoad(filename string) (*TrackerUpdate, error) {
 	}
 	return t, nil
 }
-func (t *TrackerUpdate) save(filename string) error {
+func (t *TrackerUpdate) save(trackerFileName string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	pwd, err := os.Getwd()
+	ErrChk(err)
+	dir := filepath.Join(pwd, ".wooh-output")
+	file_path := filepath.Join(dir, trackerFileName)
+
 	data, err := json.Marshal(t)
-	if err != nil {
+	ErrChk(err)
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filename, data, 0644)
+	return os.WriteFile(file_path, data, 0644)
 }
-func (pc *ProductCache) FetchFromCache(cacheFile string, maxAge time.Duration) ([]map[string]interface{}, error) {
+func (pc *ProductCache) FetchFromCache(cacheFilePath string, maxAge time.Duration) ([]map[string]interface{}, error) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
-	data, err := os.ReadFile(cacheFile)
+	data, err := os.ReadFile(cacheFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -76,7 +83,7 @@ func (pc *ProductCache) FetchFromCache(cacheFile string, maxAge time.Duration) (
 	}
 	return nil, nil
 }
-func (pc *ProductCache) SaveToCache(cacheFile string, products []WooProduct) {
+func (pc *ProductCache) SaveToCache(productCacheFilePath string, products []WooProduct) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 
@@ -101,10 +108,18 @@ func (pc *ProductCache) SaveToCache(cacheFile string, products []WooProduct) {
 		log.Printf("Warning: could not marshal cache: %v", err)
 		return
 	}
-	if err := os.WriteFile(cacheFile, data, 0644); err != nil {
+
+	dir := filepath.Dir(productCacheFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("Warning: could not create directory for cache file: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(productCacheFilePath, data, 0644); err != nil {
 		log.Printf("Warning: could not save cache file: %v", err)
 	}
 }
+
 func Contains(strRange []string, pattern string) bool {
 	for _, val := range strRange {
 		match, _ := regexp.MatchString(pattern, val)
@@ -134,6 +149,8 @@ func GetConfig(configPath string) (*Config, error) {
 		WpKey:             "",
 		WooConsumerKey:    "woo_consumer_key",
 		WooConsumerSecret: "woo_consumer_secret",
+		TrackerPath:       "tracker-state.json",
+		ProductCachePath:  "products-cache.json",
 		ProductMeta: ProductMeta{
 			Type:             "simple",
 			RegularPrice:     "0.00",

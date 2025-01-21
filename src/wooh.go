@@ -28,7 +28,6 @@ type ProductMeta struct {
 	ShortDescription string        `yaml:"short_description"`
 	Categories       []interface{} `yaml:"categories"`
 }
-
 type WooProduct struct {
 	ID               int64         `json:"id"`
 	Name             string        `json:"name"`
@@ -42,7 +41,6 @@ type WooCategory struct {
 	Name string `json:"name"`
 	Slug string `json:"slug"`
 }
-
 type WooMetaData struct {
 	ID    int64       `json:"id"`
 	Key   string      `json:"key"`
@@ -52,10 +50,13 @@ type WooMetaData struct {
 // -------------------------------------------------------------------
 // Fetch WooCommerce products, with cache
 // -------------------------------------------------------------------
-func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]WooProduct, error) {
+func GetProducts(conf *Config, maxCacheAge time.Duration) ([]WooProduct, error) {
 	var pc ProductCache
+	dir, err := os.Getwd()
+	ErrChk(err)
+	productCacheFilePath := filepath.Join(dir, ".wooh-output", conf.ProductCachePath)
 
-	if cachedData, err := pc.FetchFromCache(cacheFile, maxCacheAge); err == nil && cachedData != nil {
+	if cachedData, err := pc.FetchFromCache(productCacheFilePath, maxCacheAge); err == nil && cachedData != nil {
 		jsonBytes, err := json.Marshal(cachedData)
 		if err == nil {
 			var cachedProducts []WooProduct
@@ -101,13 +102,12 @@ func GetProducts(conf *Config, cacheFile string, maxCacheAge time.Duration) ([]W
 		page++
 	}
 
-	pc.SaveToCache(cacheFile, allProducts)
+	pc.SaveToCache(productCacheFilePath, allProducts)
 	return allProducts, nil
 }
 
 func ListProductMeta(conf *Config) {
-	productCachePath := "./output/products-cache.json"
-	products, err := GetProducts(conf, productCachePath, 24*time.Hour)
+	products, err := GetProducts(conf, 24*time.Hour)
 	if err != nil {
 		log.Fatalf("Error fetching products: %v", err)
 	}
@@ -251,22 +251,20 @@ func cleanHTMLToMarkdown(html string) (string, error) {
 func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	client := resty.New()
 
-	trackerFile := "./output/seo-update-tracker.json"
 	var tracker *TrackerUpdate
 	fmt.Println("Starting SEO update...: ", restartTracking)
 	if restartTracking {
 		tracker = &TrackerUpdate{UpdatedIDs: make(map[int]bool)}
 	} else {
 		var err error
-		tracker, err = TrackerLoad(trackerFile)
+		tracker, err = TrackerLoad(conf.TrackerPath)
 		if err != nil {
 			return fmt.Errorf("failed to load SEO update tracker: %w", err)
 		}
 	}
 
-	cacheFile := "./wooh-output/products-cache.json"
 	maxCacheAge := 24 * time.Hour
-	products, err := GetProducts(conf, cacheFile, maxCacheAge)
+	products, err := GetProducts(conf, maxCacheAge)
 	if err != nil {
 		return fmt.Errorf("failed to fetch products: %w", err)
 	}
@@ -378,7 +376,7 @@ func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 		log.Printf("Successfully updated SEO for product ID %v", productID)
 
 		tracker.UpdatedIDs[productID] = true
-		if err := tracker.save(trackerFile); err != nil {
+		if err := tracker.save(conf.TrackerPath); err != nil {
 			log.Printf("Warning: could not save SEO tracker file: %v", err)
 		}
 	}
