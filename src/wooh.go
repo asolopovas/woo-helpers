@@ -1,6 +1,7 @@
 package wooh
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -251,7 +252,7 @@ func (t *seoUpdateTracker) save(filename string) error {
 // -------------------------------------------------------------------
 // UpdateSEO now has a restartTracking param and uses the tracker
 // -------------------------------------------------------------------
-func UpdateSEO(conf *Config, restartTracking bool) error {
+func UpdateSEO(conf *Config, restartTracking bool, prompt bool) error {
 	client := resty.New()
 
 	trackerFile := "seo-update-tracker.json"
@@ -277,8 +278,7 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 		return fmt.Errorf("failed to fetch products: %w", err)
 	}
 	fmt.Printf("Products To Be Processed: %d\n", len(products))
-
-	// reader := bufio.NewReader(os.Stdin)
+	reader := bufio.NewReader(os.Stdin)
 
 	for _, product := range products {
 		rawID := product["id"]
@@ -330,25 +330,27 @@ func UpdateSEO(conf *Config, restartTracking bool) error {
 			continue
 		}
 
-		fmt.Println("Meta Title: " + metaTitle)
-		fmt.Println("Meta Description: " + metaDescription)
-
 		skipThisProduct := false
-		// for {
-		// 	fmt.Println("Do you approve these values? (y/n): ")
-		// 	input, _ := reader.ReadString('\n')
-		// 	input = strings.TrimSpace(input)
 
-		// 	if input == "y" {
-		// 		break
-		// 	} else if input == "n" {
-		// 		fmt.Println("Skipping this product...")
-		// 		skipThisProduct = true
-		// 		break
-		// 	} else {
-		// 		fmt.Println("Invalid input. Please enter 'y' or 'n'.")
-		// 	}
-		// }
+		if prompt {
+			fmt.Println("Meta Title: " + metaTitle)
+			fmt.Println("Meta Description: " + metaDescription)
+			for {
+				fmt.Println("Do you approve these values? (y/n): ")
+				input, _ := reader.ReadString('\n')
+				input = strings.TrimSpace(input)
+
+				if input == "y" {
+					break
+				} else if input == "n" {
+					fmt.Println("Skipping this product...")
+					skipThisProduct = true
+					break
+				} else {
+					fmt.Println("Invalid input. Please enter 'y' or 'n'.")
+				}
+			}
+		}
 
 		if skipThisProduct {
 			continue
